@@ -157,23 +157,24 @@ if __name__ == "__main__":
     for i, row in cor_osv_tb.iterrows():  # Apply models or correlations to dataframe
         try:
             # OSV
-            cor_osv_tb.loc[i, 'dt_js'], cor_osv_tb.loc[i, 'x_js'] = mod.calJeong(osv_tb.loc[i, 'q'], osv_tb.loc[i, 'rhof'], osv_tb.loc[i, 'dh'], osv_tb.loc[i, 'v'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'kf'], osv_tb.loc[i, 'pe'], osv_tb.loc[i, 'lam'], osv_tb.loc[i, 'pr'],  osv_tb.loc[i, 'we']) # Jeong and Shim
-            cor_osv_tb.loc[i, 'dt_sz'], cor_osv_tb.loc[i, 'x_sz'] = mod.calSahaZuber(osv_tb.loc[i, 'q'], osv_tb.loc[i, 'rhof'], osv_tb.loc[i, 'dh'], osv_tb.loc[i, 'g'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'kf'], osv_tb.loc[i, 'pe'], osv_tb.loc[i, 'lam']) # Saha and Zuber
-            cor_osv_tb.loc[i, 'dt_levy'], cor_osv_tb.loc[i, 'x_levy'] = mod.calLevy(osv_tb.loc[i, 'sigma'], osv_tb.loc[i, 'dh'], osv_tb.loc[i, 'rhof'], osv_tb.loc[i, 'muf'], osv_tb.loc[i, 'kf'], osv_tb.loc[i, 're'], osv_tb.loc[i, 'pr'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'g'], osv_tb.loc[i, 'q'], osv_tb.loc[i, 'lam'], osv_tb.loc[i, 'v']) # Levy
-            cor_osv_tb.loc[i, 'dt_bowr'], cor_osv_tb.loc[i, 'x_bowr'] = mod.calBowring(osv_tb.loc[i, 'p'], osv_tb.loc[i, 'q'], osv_tb.loc[i, 'v'], osv_tb.loc[i, 'lam'], osv_tb.loc[i, 'cpf']) # Bowring
-            cor_osv_tb.loc[i, 'dt_unal'], cor_osv_tb.loc[i, 'x_unal'] = mod.calUnal(osv_tb.loc[i, 'q'], osv_tb.loc[i, 'pr'], osv_tb.loc[i, 'dh'], osv_tb.loc[i, 'v'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'kf'], osv_tb.loc[i, 're'], osv_tb.loc[i, 'refri'], osv_tb.loc[i, 'lam']) # Unal
-            cor_osv_tb.loc[i, 'dt_msz'], cor_osv_tb.loc[i, 'x_msz'] = mod.calMSZ(osv_tb.loc[i, 'q'], osv_tb.loc[i, 'rhof'], osv_tb.loc[i, 'dh'], osv_tb.loc[i, 'g'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'kf'], osv_tb.loc[i, 'pe'], osv_tb.loc[i, 'lam'], osv_tb.loc[i, 'hsur'], osv_tb.loc[i, 'geo'],osv_tb.loc[i, 'doi'], osv_tb.loc[i, 'dio'], osv_tb.loc[i, 'lh']) # Modified Saha and Zuber (2013)
-            cor_osv_tb.loc[i, 'dt_costa'], cor_osv_tb.loc[i, 'x_costa'] = mod.calCosta(osv_tb.loc[i, 'geo'], osv_tb.loc[i, 'q'], osv_tb.loc[i, 'v'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'lam']) # Costa
-            cor_osv_tb.loc[i, 'dt_griffith'], cor_osv_tb.loc[i, 'x_griffith'] = mod.calGriffith(osv_tb.loc[i, 'q'], osv_tb.loc[i, 'g'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'lam']) # Griffith
-            cor_osv_tb.loc[i, 'dt_hancox'], cor_osv_tb.loc[i, 'x_hancox'] = mod.calHancox(osv_tb.loc[i, 'q'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'lam'], osv_tb.loc[i, 'kf'], osv_tb.loc[i, 'de'], osv_tb.loc[i, 're'], osv_tb.loc[i, 'pr']) # Hancox and Nicoll
-            #cor_osv_tb.loc[i, 'dt_thom'], cor_osv_tb.loc[i, 'x_thom'] = mod.calThom(osv_tb.loc[i, 'q'], osv_tb.loc[i, 'g'], osv_tb.loc[i, 'lam'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'hfo']) # Thom (1966)
-            cor_osv_tb.loc[i, 'dt_ha2005'], cor_osv_tb.loc[i, 'x_ha2005'] = mod.calHa2005(osv_tb.loc[i, 'q'],osv_tb.loc[i, 'dh'],osv_tb.loc[i, 'kf'],osv_tb.loc[i, 'cpf'],osv_tb.loc[i, 'lam'],osv_tb.loc[i, 'pe']) # Ha 2005
-            cor_osv_tb.loc[i, 'dt_ha2018'], cor_osv_tb.loc[i, 'x_ha2018'] = mod.calHa2018(osv_tb.loc[i, 'rhof'], osv_tb.loc[i, 'rhov'], osv_tb.loc[i, 'lam'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'bo'], osv_tb.loc[i, 'v']) # Ha 2018
-            cor_osv_tb.loc[i, 'dt_dix'], cor_osv_tb.loc[i, 'x_dix'] = mod.calDix(osv_tb.loc[i, 'kf'], osv_tb.loc[i, 'q'], osv_tb.loc[i, 'dh'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'lam'], osv_tb.loc[i, 're'], osv_tb.loc[i, 'pr']) # Dix (1971)
+            cor_osv_tb.loc[i, 'dt_js'], cor_osv_tb.loc[i, 'x_js']               = mod.calJeong(osv_tb.loc[i, 'q'], osv_tb.loc[i, 'rhof'], osv_tb.loc[i, 'dh'], osv_tb.loc[i, 'v'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'kf'], osv_tb.loc[i, 'pe'], osv_tb.loc[i, 'lam'], osv_tb.loc[i, 'pr'],  osv_tb.loc[i, 'we']) # Jeong and Shim
+            cor_osv_tb.loc[i, 'dt_sz'], cor_osv_tb.loc[i, 'x_sz']               = mod.calSahaZuber(osv_tb.loc[i, 'q'], osv_tb.loc[i, 'rhof'], osv_tb.loc[i, 'dh'], osv_tb.loc[i, 'g'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'kf'], osv_tb.loc[i, 'pe'], osv_tb.loc[i, 'lam']) # Saha and Zuber
+            cor_osv_tb.loc[i, 'dt_levy'], cor_osv_tb.loc[i, 'x_levy']           = mod.calLevy(osv_tb.loc[i, 'sigma'], osv_tb.loc[i, 'dh'], osv_tb.loc[i, 'rhof'], osv_tb.loc[i, 'muf'], osv_tb.loc[i, 'kf'], osv_tb.loc[i, 're'], osv_tb.loc[i, 'pr'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'g'], osv_tb.loc[i, 'q'], osv_tb.loc[i, 'lam'], osv_tb.loc[i, 'v']) # Levy
+            cor_osv_tb.loc[i, 'dt_bowr'], cor_osv_tb.loc[i, 'x_bowr']           = mod.calBowring(osv_tb.loc[i, 'p'], osv_tb.loc[i, 'q'], osv_tb.loc[i, 'v'], osv_tb.loc[i, 'lam'], osv_tb.loc[i, 'cpf']) # Bowring
+            cor_osv_tb.loc[i, 'dt_unal'], cor_osv_tb.loc[i, 'x_unal']           = mod.calUnal(osv_tb.loc[i, 'q'], osv_tb.loc[i, 'pr'], osv_tb.loc[i, 'dh'], osv_tb.loc[i, 'v'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'kf'], osv_tb.loc[i, 're'], osv_tb.loc[i, 'refri'], osv_tb.loc[i, 'lam']) # Unal
+            cor_osv_tb.loc[i, 'dt_msz'], cor_osv_tb.loc[i, 'x_msz']             = mod.calMSZ(osv_tb.loc[i, 'q'], osv_tb.loc[i, 'rhof'], osv_tb.loc[i, 'dh'], osv_tb.loc[i, 'g'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'kf'], osv_tb.loc[i, 'pe'], osv_tb.loc[i, 'lam'], osv_tb.loc[i, 'hsur'], osv_tb.loc[i, 'geo'],osv_tb.loc[i, 'doi'], osv_tb.loc[i, 'dio'], osv_tb.loc[i, 'lh']) # Modified Saha and Zuber (2013)
+            cor_osv_tb.loc[i, 'dt_costa'], cor_osv_tb.loc[i, 'x_costa']         = mod.calCosta(osv_tb.loc[i, 'geo'], osv_tb.loc[i, 'q'], osv_tb.loc[i, 'v'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'lam']) # Costa
+            cor_osv_tb.loc[i, 'dt_griffith'], cor_osv_tb.loc[i, 'x_griffith']   = mod.calGriffith(osv_tb.loc[i, 'q'], osv_tb.loc[i, 'g'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'lam']) # Griffith
+            cor_osv_tb.loc[i, 'dt_hancox'], cor_osv_tb.loc[i, 'x_hancox']       = mod.calHancox(osv_tb.loc[i, 'q'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'lam'], osv_tb.loc[i, 'kf'], osv_tb.loc[i, 'de'], osv_tb.loc[i, 're'], osv_tb.loc[i, 'pr']) # Hancox and Nicoll
+            cor_osv_tb.loc[i, 'dt_ha2005'], cor_osv_tb.loc[i, 'x_ha2005']       = mod.calHa2005(osv_tb.loc[i, 'q'],osv_tb.loc[i, 'dh'],osv_tb.loc[i, 'kf'],osv_tb.loc[i, 'cpf'],osv_tb.loc[i, 'lam'],osv_tb.loc[i, 'pe']) # Ha 2005
+            cor_osv_tb.loc[i, 'dt_ha2018'], cor_osv_tb.loc[i, 'x_ha2018']       = mod.calHa2018(osv_tb.loc[i, 'rhof'], osv_tb.loc[i, 'rhov'], osv_tb.loc[i, 'lam'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'bo'], osv_tb.loc[i, 'v']) # Ha 2018
+            cor_osv_tb.loc[i, 'dt_dix'], cor_osv_tb.loc[i, 'x_dix']             = mod.calDix(osv_tb.loc[i, 'kf'], osv_tb.loc[i, 'q'], osv_tb.loc[i, 'dh'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'lam'], osv_tb.loc[i, 're'], osv_tb.loc[i, 'pr']) # Dix (1971)
             cor_osv_tb.loc[i, 'dt_sekoguchi'], cor_osv_tb.loc[i, 'x_sekoguchi'] = mod.calSekoguchi(osv_tb.loc[i, 'q'], osv_tb.loc[i, 'g'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'lam']) # Sekoguchi (1980)
-            cor_osv_tb.loc[i, 'dt_psz'], cor_osv_tb.loc[i, 'x_psz'] = mod.calParkSahaZuber(osv_tb.loc[i, 'q'], osv_tb.loc[i, 'rhof'], osv_tb.loc[i, 'dh'], osv_tb.loc[i, 'g'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'kf'], osv_tb.loc[i, 'pe'], osv_tb.loc[i, 'lam']) # Park Saha and Zuber (2004)
-            cor_osv_tb.loc[i, 'dt_costa'], cor_osv_tb.loc[i, 'x_costa'] = mod.calCosta(osv_tb.loc[i, 'geo'], osv_tb.loc[i, 'q'], osv_tb.loc[i, 'v'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'lam'])
-            cor_osv_tb.loc[i, 'dt_kal'], cor_osv_tb.loc[i, 'x_kal'] = mod.calKalitvianski(osv_tb.loc[i, 'q'], osv_tb.loc[i, 'dh'], osv_tb.loc[i, 'kf'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'lam'], osv_tb.loc[i, 'pe'])
+            cor_osv_tb.loc[i, 'dt_psz'], cor_osv_tb.loc[i, 'x_psz']             = mod.calParkSahaZuber(osv_tb.loc[i, 'q'], osv_tb.loc[i, 'rhof'], osv_tb.loc[i, 'dh'], osv_tb.loc[i, 'g'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'kf'], osv_tb.loc[i, 'pe'], osv_tb.loc[i, 'lam']) # Park Saha and Zuber (2004)
+            cor_osv_tb.loc[i, 'dt_costa'], cor_osv_tb.loc[i, 'x_costa']         = mod.calCosta(osv_tb.loc[i, 'geo'], osv_tb.loc[i, 'q'], osv_tb.loc[i, 'v'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'lam'])
+            cor_osv_tb.loc[i, 'dt_kal'], cor_osv_tb.loc[i, 'x_kal']             = mod.calKalitvianski(osv_tb.loc[i, 'q'], osv_tb.loc[i, 'dh'], osv_tb.loc[i, 'kf'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'lam'], osv_tb.loc[i, 'pe'])
+            #cor_osv_tb.loc[i, 'dt_thom'], cor_osv_tb.loc[i, 'x_thom'] = mod.calThom(osv_tb.loc[i, 'q'], osv_tb.loc[i, 'g'], osv_tb.loc[i, 'lam'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'hfo']) # Thom (1966)
+
             # OFI
             """cor_osv_tb.loc[i, 'dt_el'], cor_osv_tb.loc[i, 'x_el'] = mod.calEl(osv_tb.loc[i, 'bo_el'], osv_tb.loc[i, 'pr'], osv_tb.loc[i, 'lh'], osv_tb.loc[i, 'dh'],
                                         osv_tb.loc[i, 'dtin'],
@@ -252,8 +253,7 @@ if __name__ == "__main__":
 
     # Feature analysis
     # 숫자값만 가지는 df 테이블 생성
-    df_nur = osv_tb[osv_tb.columns.difference(['datap', 'run_id','source', 'refri', 'geo','flow','pp','alpha','xeq',
-                                               'xMartin','serizawaXeq','martinXeq','staubXeq','gsat','qratio'])]
+    df_nur = osv_tb[osv_tb.columns.difference(['datap', 'run_id','source', 'refri', 'geo','flow','pp','alpha','xeq', 'xMartin','serizawaXeq','martinXeq','staubXeq','gsat','qratio'])]
 
     # MIN-MAX Scaler 적용한 데이터프레임 만들기
     min_max_scaler = MinMaxScaler(feature_range=[0, 1])
