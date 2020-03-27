@@ -15,7 +15,7 @@ from sklearn.linear_model import LinearRegression
 from scipy.integrate import ode
 
 # 내가 만든 모듈 임포트
-from OSVModel import *
+from ModelOSV import *
 from PhysicalProperty import *
 from StructuredQuery import *
 from Numeric import *
@@ -41,7 +41,7 @@ if __name__ == "__main__":
     print(db_engine)
 
     # OSV 데이터베이스 연결
-    load_osv_query = "SELECT * FROM rawdata_1 WHERE datap = 'OSV'"
+    load_osv_query = "SELECT * FROM rawdata_1 WHERE source IN ('Dix', 'Maurer', 'Rouhani', 'Egen et al.', 'Martin', 'Staub et al.', 'Bartolemei and Chanturiya', 'Evangelisti and Lupoli')"
     osv_tb = sql.read_sql(load_osv_query, db_engine)
     print("현재 호출된 table은 osv_tb입니다.")
 
@@ -105,7 +105,7 @@ if __name__ == "__main__":
                 xeq = list((map(float, osv_tb.loc[i, 'xeq'].split('|'))))
                 fitPoly = np.polyfit(xeq, alpha, 3)
                 inflectionPoint = round(-fitPoly[1] / (3 * fitPoly[0]), 4)
-                xMartin = fitPoly[3]
+                xMartin = round(fitPoly[3], 4)
                 osv_tb.loc[i, 'xMartin'] = xMartin
                 osv_tb.loc[i, 'serizawaXeq'] = inflectionPoint
                 osv_tb.loc[i, 'martinXeq'] = round(-fitPoly[3] / fitPoly[2], 4)
@@ -212,17 +212,17 @@ if __name__ == "__main__":
         각 method (Martin, Serizawa, Staub)의 값이 0 미만이면서 최소값을 solution으로 가정.
         solution column을 만들기 위한 작업
         """
-        if osv_tb.loc[i, 'martinXeq'] > 0:
+        if osv_tb.loc[i, 'martinXeq'] >= 0:
             cor_osv_tb.loc[i, 'rmseMartinXeq'] = np.nan
         else:
             cor_osv_tb.loc[i, 'rmseMartinXeq'] = round((1 - cor_osv_tb.loc[i, 'x_js'] / osv_tb.loc[i, 'martinXeq']), 6)
 
-        if osv_tb.loc[i, 'serizawaXeq'] > 0:
+        if osv_tb.loc[i, 'serizawaXeq'] >= 0:
             cor_osv_tb.loc[i, 'rmseSerizawaXeq'] = np.nan
         else:
             cor_osv_tb.loc[i, 'rmseSerizawaXeq'] = round((1 - cor_osv_tb.loc[i, 'x_js'] / osv_tb.loc[i, 'serizawaXeq']), 6)
 
-        if osv_tb.loc[i, 'staubXeq'] > 0:
+        if osv_tb.loc[i, 'staubXeq'] >= 0:
             cor_osv_tb.loc[i, 'rmseStaubXeq'] = np.nan
         else:
             cor_osv_tb.loc[i, 'rmseStaubXeq'] = round((1 - cor_osv_tb.loc[i, 'x_js'] / osv_tb.loc[i, 'staubXeq']), 6)
