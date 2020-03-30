@@ -15,7 +15,7 @@ from sklearn.linear_model import LinearRegression
 from scipy.integrate import ode
 
 # 내가 만든 모듈 임포트
-from OSVModel import *
+from ModelOSV import *
 from PhysicalProperty import *
 from StructuredQuery import *
 from Numeric import *
