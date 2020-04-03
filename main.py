@@ -111,19 +111,22 @@ if __name__ == "__main__":
                 osv_tb.loc[i, 'martinXeq'] = round(-fitPoly[3] / fitPoly[2], 4)
                 osv_tb.loc[i, 'staubXeq'] = round((2 * fitPoly[0] * inflectionPoint ** 3 + fitPoly[1] * inflectionPoint ** 2 - fitPoly[3]) / (3 * fitPoly[0] * inflectionPoint ** 2 + 2 * fitPoly[1] * inflectionPoint + fitPoly[2]), 4)
                 # Boiling number 가 0.001 이하 이고, xmaritn (y절편)이 0.5 이상일 때 xosv를 계산
-                if osv_tb.loc[i, 'serizawaXeq'] < -0.014:
-                    if osv_tb.loc[i, 'bo'] < 0.0005:
-                        osv_tb.loc[i, 'xosv'] = round(osv_tb.loc[i, 'martinXeq'], 4)
-                    else:
-                        if osv_tb.loc[i, 'staubXeq'] > 0:
-                            osv_tb.loc[i, 'xosv'] = round(min(osv_tb.loc[i, ['serizawaXeq', 'martinXeq']]), 4)
+                if osv_tb.loc[i, 'bo'] <= 0.001:
+                    if osv_tb.loc[i, 'xMartin'] >= 0.5:
+                        if osv_tb.loc[i,'serizawaXeq'] <= 0:
+                            osv_tb.loc[i, 'xosv'] = round(osv_tb.loc[i, 'serizawaXeq'], 4)
                         else:
-                            osv_tb.loc[i, 'xosv'] = round(osv_tb.loc[i, 'staubXeq'], 4)
-                else:
-                    if osv_tb.loc[i, 'serizawaXeq'] < -0.075:
-                        osv_tb.loc[i, 'xosv'] = round(osv_tb.loc[i, 'serizawaXeq'], 4)
+                            osv_tb.loc[i, 'xosv'] = round(np.min(osv_tb.loc[i, ['staubXeq','martinXeq']]), 4)
                     else:
                         osv_tb.loc[i, 'xosv'] = round(osv_tb.loc[i, 'martinXeq'], 4)
+                else:
+                    round(np.min(osv_tb.loc[i, ['staubXeq','serizawaXeq']]), 4)
+                
+                if osv_tb.loc[i,'xosv'] >= 0:
+                    osv_tb.loc[i, 'xosv'] = np.nan
+                else:
+                    continue
+                
         except Exception as e:
             print('{} source의 run_id: {}에서 Error 발생. 낮은 Polyfit 예측정확도를 가집니다.'.format(osv_tb.loc[i, 'source'], osv_tb.loc[i, 'run_id']))
             print(e)
@@ -215,17 +218,17 @@ if __name__ == "__main__":
         if osv_tb.loc[i, 'martinXeq'] > 0:
             cor_osv_tb.loc[i, 'rmseMartinXeq'] = np.nan
         else:
-            cor_osv_tb.loc[i, 'rmseMartinXeq'] = round((1 - cor_osv_tb.loc[i, 'x_js'] / osv_tb.loc[i, 'martinXeq']), 6)
+            cor_osv_tb.loc[i, 'rmseMartinXeq'] = round((1 - cor_osv_tb.loc[i, 'x_sz'] / osv_tb.loc[i, 'martinXeq']), 6)
 
         if osv_tb.loc[i, 'serizawaXeq'] > 0:
             cor_osv_tb.loc[i, 'rmseSerizawaXeq'] = np.nan
         else:
-            cor_osv_tb.loc[i, 'rmseSerizawaXeq'] = round((1 - cor_osv_tb.loc[i, 'x_js'] / osv_tb.loc[i, 'serizawaXeq']), 6)
+            cor_osv_tb.loc[i, 'rmseSerizawaXeq'] = round((1 - cor_osv_tb.loc[i, 'x_sz'] / osv_tb.loc[i, 'serizawaXeq']), 6)
 
         if osv_tb.loc[i, 'staubXeq'] > 0:
             cor_osv_tb.loc[i, 'rmseStaubXeq'] = np.nan
         else:
-            cor_osv_tb.loc[i, 'rmseStaubXeq'] = round((1 - cor_osv_tb.loc[i, 'x_js'] / osv_tb.loc[i, 'staubXeq']), 6)
+            cor_osv_tb.loc[i, 'rmseStaubXeq'] = round((1 - cor_osv_tb.loc[i, 'x_sz'] / osv_tb.loc[i, 'staubXeq']), 6)
 
         cor_osv_tb.loc[i, 'tstXeq'] = min(np.abs(cor_osv_tb.loc[i, 'rmseSerizawaXeq']),
                                           np.abs(cor_osv_tb.loc[i, 'rmseMartinXeq']),
