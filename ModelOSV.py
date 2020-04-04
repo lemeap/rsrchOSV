@@ -106,7 +106,6 @@ class ModelOSV(PhysicalProperty):
         xOSV = -cpf * dtOSV / lam
         return round(dtOSV,4), round(xOSV,4)
 
-
     def calSahaZuber(self, q, rhof, dh, g, cpf, kf, Pe, lam):  # Saha and Zuber (1974)
         """
         :param q: Heat flux [MW/m2]
