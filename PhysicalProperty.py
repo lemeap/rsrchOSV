@@ -55,6 +55,10 @@ class PhysicalProperty():
             Gz = (dh/lh) * re * pr
         return Gz
 
+    def calEc(self, v, cpf, tosv): # Eckert number
+        Ec = v ** 2 / (cpf * tosv)
+        return Ec * 10**6
+
     def calJa(self, cpf, tosv, lam): # Jakob number
         Ja = cpf * tosv / lam
         return Ja

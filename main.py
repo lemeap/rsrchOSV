@@ -74,6 +74,7 @@ if __name__ == "__main__":
             osv_tb.loc[i, 'bo'] = round(pro.calBo(osv_tb.loc[i, 'q'], osv_tb.loc[i, 'lam'], osv_tb.loc[i, 'g']), 6)
             continue
 
+
     """# 조건에 따른 inlet subcooling, Gsat, Qratio 계산
     for i, row in osv_tb.iterrows():
         if osv_tb.loc[i, 'dtin'] == np.nan:
@@ -139,6 +140,25 @@ if __name__ == "__main__":
                                                               linReg.coef_[0, 2] * inflectionPoint + linReg.coef_[
                                                                   0, 1]), 4)
 
+                osv_tb.loc[i, 'bo'] = round(pro.calBo(osv_tb.loc[i, 'q'], osv_tb.loc[i, 'lam'], osv_tb.loc[i, 'g']), 6)
+                osv_tb.loc[i, 'pe'] = round(pro.calPe(osv_tb.loc[i, 'dh'], osv_tb.loc[i, 'g'], osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'kf']), 6)
+                osv_tb.loc[i, 'pr'] = round(pro.calPr(osv_tb.loc[i, 'cpf'], osv_tb.loc[i, 'muf'], osv_tb.loc[i, 'kf']), 6)
+
+                if osv_tb.loc[i, 'pr'] <= 1.5:
+                    if osv_tb.loc[i, 'xMartin'] < 0.45:
+                        if osv_tb.loc[i, 'martinXeq'] > 0:
+                            osv_tb.loc[i, 'xosv'] = round(min(osv_tb.loc[i, ['serizawaXeq','staubXeq']]), 4)
+                        else:
+                            osv_tb.loc[i, 'xosv'] = round(osv_tb.loc[i, 'martinXeq'], 4)
+                    else:
+                        osv_tb.loc[i, 'xosv'] = round(min(osv_tb.loc[i, ['martinXeq', 'staubXeq']]), 4)
+                else:
+                    if osv_tb.loc[i, 'serizawaXeq'] > 0:
+                        osv_tb.loc[i, 'xosv'] = round(min(osv_tb.loc[i, ['martinXeq','staubXeq']]), 4)
+                    else:
+                        osv_tb.loc[i, 'xosv'] = round(osv_tb.loc[i, 'serizawaXeq'], 4)
+
+                """
                 if osv_tb.loc[i, 'serizawaXeq'] < -0.014:
                     if osv_tb.loc[i, 'bo'] < 0.0005:
                         osv_tb.loc[i, 'xosv'] = round(osv_tb.loc[i, 'martinXeq'], 4)
@@ -152,7 +172,7 @@ if __name__ == "__main__":
                         osv_tb.loc[i, 'xosv'] = round(osv_tb.loc[i, 'serizawaXeq'], 4)
                     else:
                         osv_tb.loc[i, 'xosv'] = round(osv_tb.loc[i, 'martinXeq'], 4)
-
+                """
         except Exception as e:
             print('{} source의 run_id: {}에서 Error 발생. 낮은 Polyfit 예측정확도를 가집니다.'.format(osv_tb.loc[i, 'source'],
                                                                                      osv_tb.loc[i, 'run_id']))
@@ -182,6 +202,7 @@ if __name__ == "__main__":
         osv_tb[['muf', 'v', 'sigma', 'rhof']].apply(lambda x: pro.calCa(x[0], x[1], x[2], x[3]), axis=1), 6)
     osv_tb['nu'] = round(osv_tb[['q', 'dh', 'kf', 'tosv']].apply(lambda x: pro.calNu(x[0], x[1], x[2], x[3]), axis=1),
                          6)
+    osv_tb['ec'] = round(osv_tb[['v', 'cpf', 'tosv']].apply(lambda x: pro.calEc(x[0], x[1], x[2]), axis=1), 6)
 
     # 계산된 osv_tb의 properties 데이터를 PostgreSQL로 옮기기
     osv_tb.index.name = 'index'
@@ -201,7 +222,7 @@ if __name__ == "__main__":
                                                                                  osv_tb.loc[i, 'kf'],
                                                                                  osv_tb.loc[i, 'pe'],
                                                                                  osv_tb.loc[i, 'lam'],
-                                                                                 osv_tb.loc[i, 'pr'],
+                                                                                 osv_tb.loc[i, 'ca'],
                                                                                  osv_tb.loc[i, 'we'])  # Jeong and Shim
             cor_osv_tb.loc[i, 'dt_sz'], cor_osv_tb.loc[i, 'x_sz'] = mod.calSahaZuber(osv_tb.loc[i, 'q'],
                                                                                      osv_tb.loc[i, 'rhof'],
@@ -354,18 +375,15 @@ if __name__ == "__main__":
         if osv_tb.loc[i, 'martinXeq'] > 0:
             cor_osv_tb.loc[i, 'rmseMartinXeq'] = 100
         else:
-            cor_osv_tb.loc[i, 'rmseMartinXeq'] = round((1 - (osv_tb.loc[i, 'martinXeq'] / cor_osv_tb.loc[i, 'x_js'])),
-                                                       4)
+            cor_osv_tb.loc[i, 'rmseMartinXeq'] = round((1 - (osv_tb.loc[i, 'martinXeq'] / cor_osv_tb.loc[i, 'x_sz'])), 4)
         if osv_tb.loc[i, 'serizawaXeq'] > 0:
             cor_osv_tb.loc[i, 'rmseSerizawaXeq'] = 100
         else:
-            cor_osv_tb.loc[i, 'rmseSerizawaXeq'] = round(
-                (1 - (osv_tb.loc[i, 'serizawaXeq'] / cor_osv_tb.loc[i, 'x_js'])), 4)
-
+            cor_osv_tb.loc[i, 'rmseSerizawaXeq'] = round((1 - (osv_tb.loc[i, 'serizawaXeq'] / cor_osv_tb.loc[i, 'x_sz'])), 4)
         if osv_tb.loc[i, 'staubXeq'] > 0:
             cor_osv_tb.loc[i, 'rmseStaubXeq'] = 100
         else:
-            cor_osv_tb.loc[i, 'rmseStaubXeq'] = round((1 - (osv_tb.loc[i, 'staubXeq'] / cor_osv_tb.loc[i, 'x_js'])), 4)
+            cor_osv_tb.loc[i, 'rmseStaubXeq'] = round((1 - (osv_tb.loc[i, 'staubXeq'] / cor_osv_tb.loc[i, 'x_sz'])), 4)
 
         # 최소값 찾기 알고리즘
         minRmse = list(np.abs(cor_osv_tb.loc[i, ['rmseSerizawaXeq', 'rmseMartinXeq', 'rmseStaubXeq']]))

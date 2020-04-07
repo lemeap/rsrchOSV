@@ -321,7 +321,7 @@ class ModelOSV(PhysicalProperty):
             xOSV = -cpf * dtOSV / lam
             return round(dtOSV,4), round(xOSV,4)
 
-    def calJeong(self, q, rhof, dh, v, cpf, kf, Pe, lam, Pr, We):  # Jeong and Shim (2019)
+    def calJeong(self, q, rhof, dh, v, cpf, kf, Pe, lam, Ca, We):  # Jeong and Shim (2019)
         """
 
         :param q: Heat flux [MW/m2]
@@ -334,12 +334,12 @@ class ModelOSV(PhysicalProperty):
         :param lam: Heat of vaporization [J/kg]
         :return: Equilibrium thermal quality [-]
         """
-        if We <= 150:
-            dtOSV = (q * (10 ** 6)) / (rhof*v*cpf*(205 * Pe ** -0.89))
+        if We <= 500:
+            dtOSV = (q * (10 ** 6)) / (rhof*v*cpf*(240 * (Pe) ** -0.92))
             xOSV = -cpf * dtOSV / lam
             return round(dtOSV,4), round(xOSV,4)
         else:
-            dtOSV = (q * 10 ** 6 * dh) / (kf*(0.12*Pe**0.765))
+            dtOSV = (q * (10 ** 6)) / (rhof*v*cpf*(0.1259 * (Pe) ** -0.24))
             xOSV = -cpf * dtOSV / lam
             return round(dtOSV,4), round(xOSV,4)
 
