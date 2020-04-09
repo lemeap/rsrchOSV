@@ -223,7 +223,9 @@ if __name__ == "__main__":
                                                                                  osv_tb.loc[i, 'pe'],
                                                                                  osv_tb.loc[i, 'lam'],
                                                                                  osv_tb.loc[i, 'ca'],
-                                                                                 osv_tb.loc[i, 'we'])  # Jeong and Shim
+                                                                                 osv_tb.loc[i, 'we'],
+                                                                                 osv_tb.loc[i, 'bo'],
+                                                                                 osv_tb.loc[i, 'bd'])# Jeong and Shim
             cor_osv_tb.loc[i, 'dt_sz'], cor_osv_tb.loc[i, 'x_sz'] = mod.calSahaZuber(osv_tb.loc[i, 'q'],
                                                                                      osv_tb.loc[i, 'rhof'],
                                                                                      osv_tb.loc[i, 'dh'],
