@@ -1,0 +1,1256 @@
+---
+title: "Rscript_OSV"
+author: "Lemeap"
+date: '2020 2 23 '
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+#0. Set operating environment of this code
+install.packages(c('openxlsx','nlstools','Metrics','scales','digitize','tidyverse','DBI','odbc','RPostgreSQL'))
+#1. Library source files
+library(openxlsx)
+library(nlstools)
+library(tidyverse)
+library(Metrics)
+library(digitize)
+library(ggplot2)
+library(DBI)
+library(odbc)
+library(RPostgreSQL)
+
+# Default fonts setup
+windowsFonts(
+  Arial   = windowsFont("Arial"),
+  Calibri = windowsFont("Calibri"),
+  Cambria = windowsFont("Cambria"),
+  Times = windowsFont("Times New Roman")
+  
+)
+
+windowsFonts()
+```
+
+```{r}
+# 2. digitizing figures.
+cal = ReadAndCal("4.png")
+data.points = DigitData(col='red')
+sam=Calibrate(data.points, cal, -0.1, 0, 0, 0.4)
+
+x=sam[1]
+y=sam[2]
+```
+
+```{r}
+# PostgreSQL set
+require("RPostgreSQL")
+con = dbConnect(dbDriver("PostgreSQL"), dbname = "Research", host="localhost", port=5432, user="postgres", password="1234")
+dbListTables(con)
+
+# df
+df = dbGetQuery(con, "SELECT T2.we, T2.pe, T2.st, T2.nu, T2.ca, T2.source, T2.geo, T3.g, T3.v, T3.sigma,T3.q, T3.rhof
+                      , T2.refri, T2.ec, T3.pr AS real_pr, T3.st AS real_st, T3.tosv, T3.cpf, T3.dh, T3.de, T3.bd AS real_bd
+                      , T3.we AS real_we, T3.re AS real_re, T3.ca AS real_ca, T3.pe AS real_pe, T3.nu AS real_nu
+                      , T3.ec AS real_ec, T3.bo AS real_bo
+                      FROM rmse_osv_tb T1
+                      INNER JOIN dimnsl_param_quan_prop_tb T2
+                      ON T1.index = T2.index
+                      INNER JOIN prop_osv_tb T3
+                      ON T2.index = T3.index
+                      --WHERE ABS(T1.rmse_js) < 0.4
+                      AND T3.xosv < 0
+                      --AND T3.source = 'Ferrell and Bylund'
+                      AND T3.we >= 200
+                      AND ABS(T1.rmse_sz) < 0.3;")
+
+# quantile 분석을 위한 db
+df1 = dbGetQuery(con, "SELECT c.*
+FROM rmse_osv_tb a
+INNER JOIN prop_osv_tb b
+ON a.index = b.index 
+INNER JOIN dimnsl_param_quan_prop_tb c
+ON b.index = c.index 
+WHERE a.xosv < 0
+AND ABS(a.rmse_sz) < 0.5
+ORDER BY ABS(a.rmse_sz) DESC
+;")
+
+
+df2 = dbGetQuery(con, "SELECT a.xosv, b.q, b.pe, b.st, b.geo
+                       FROM rmse_osv_tb a
+                       INNER JOIN prop_osv_tb b
+                       ON a.index = b.index
+					             AND b.st >0
+                       AND b.source IN ('Dougall', 'De Munk', 'McLeod', 'Rogers et al.', 'Bibeau', 'Zeitoun', 'Ahmadi et al.');")
+
+df2$sol
+
+reg_db = dbGetQuery(con, "SELECT a.*
+                          FROM prop_osv_tb a
+                          INNER JOIN rmse_osv_tb b
+                          ON a.index = b.index
+                          --WHERE ABS(b.rmse_js) < 0.4;
+                          -- we > 150
+                          --AND lh IS NOT NULL;")
+
+
+
+
+```
+
+```{r}
+# 트리구조로 xosv 결정하는 알고리즘 만들기
+anal_db = dbGetQuery(con, "SELECT *
+                     FROM tree_osv_tb
+                     --WHERE source = 'Foglia et al.'
+                     WHERE sol != 'None'
+                     AND xosv IS NOT NULL
+                     AND xosv < 0
+                     AND xosv > stxeq
+                     --AND sol != 'Martin'
+                     --AND serizawaxeq > -0.05
+                     --AND serizawaxeq < 0.00165
+                     --AND xmartin > 0.338
+                     --AND re > 35000
+                     --AND pr <= 1.51
+                     --AND serizawaxeq > -0.08
+                     --AND ABS(xosv) >= 0.01
+                     AND tstxeq < 0.65
+                     --AND ABS(rmse_sz) < 0.5;")
+                          
+
+anal_db = subset(anal_db, xMartin != "NA")
+anal_db = read.csv("tree_set.csv", header=TRUE)
+head(anal_db)
+# tree module을 이용한 결정트리 분석
+library(tree)
+install.packages("tree")
+
+treemod = tree(factor(sol)~pr+bo+pe+serizawaxeq, data=anal_db)
+plot(treemod)
+text(treemod)
+
+cv.trees = cv.tree(treemod, FUN=prune.misclass)
+plot(cv.trees)
+prune.trees = prune.misclass(treemod, best=4)
+plot(prune.trees)
+text(prune.trees, pretty=0)
+
+# PARTY 라이브러리를 사용한 결정 트리 분석
+install.packages("party")
+library(party)
+partymod<-ctree(factor(sol)~(re+xmartin+pr+dl), data=anal_db)
+plot(partymod)
+
+partypred<-predict(partymod, anal_db)
+
+# Caret 라이브러리 이용하여 데이터 분류
+install.packages('caret')
+library(caret)
+set.seed(100)
+intrain = createDataPartition(y=anal_db$sol, p=0.7, list=FALSE)
+train = anal_db[intrain,]
+test = anal_db[-intrain,]
+
+# Tree 패키지로 만들기
+
+
+```
+
+```{r}
+# 회귀분석으로 새로운 모델 만들기
+F1=formula(real_nu ~ a*real_bd^c)
+F2=formula(real_nu ~ a*real_pe^b)
+Corl1=nls(F1, start = list(a=100, c= 0.1), control = list(maxiter = 50000), data = df)
+Corl2=nls(F2, start = list(a=1, b=1), control = list(maxiter = 50000), data = df)
+summary(Corl1)
+summary(Corl2)
+```
+
+
+실험 조건 범위를 그리기 위한 그래프
+```{r}
+reg_db$pntile=ntile(reg_db$p, 10)
+summary(reg_db) 
+hist(reg_db$p, breaks=20)
+
+# pressure histogram
+ggplot(data=reg_db,aes(x=p)) +
+  geom_histogram(binwidth=18, fill = "white", colour = "black") +
+  theme_bw(base_family = "Times") +
+  theme(text=element_text(size=9.5)) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor=element_blank(), legend.justification =c(0,0.05), legend.position = c(0.45,0.75),
+        legend.background=element_rect(fill="white", size=0.5, linetype="solid", colour = "black"), legend.title=element_blank(),
+        legend.key.height=unit(0.25, unit="cm"), legend.key.width=unit(0.15, unit="cm"), legend.direction = "horizontal", 
+        legend.key.size = unit(0.5,"cm"), legend.text=element_text(size=6), axis.title.x = element_text(vjust=2)) +
+  coord_trans(limy = c(0,300)) +
+  labs(y=expression(paste(italic("Number of data "))), x=expression(paste(italic("Pressure  "), italic(" [bar]")))) +
+  ggsave("Fig. 99. no. of data vs. pressure.png", height = 6.5, width = 8, unit = "cm", dpi = 1200)
+
+# void fraction profile
+sol_levels = levels(df2$sol)
+
+df2$sol = as.numeric(df2$sol)
+ggplot(data=df2, aes(x=sol)) + geom_histogram(binwidth = 0.5) + scale_x_continuous(breaks = c(1:3), labels = c(sol_levels))
+
+
+ggplot(data=df2, aes(x=pe, y=st)) + geom_point()+ stat_function(fun = function(x) 0.5*x)
+
+
+
+# Nusselt number vs. Peclet number for new correlation 
+ggplot(data=df, aes(x=(real_we)^0.5*real_bo^-0.2, y=real_ec*10^6, col=factor(geo), shape=factor(geo))) +
+  geom_point() +
+  scale_shape_manual(values=rep(c(1:18,65:90))) +
+  scale_colour_manual(values = c("Red","Black","Blue")) +
+  labs(y=expression(paste(italic("Nusselt number "), italic(" [-]"))), x=expression(paste(italic("Peclet number "), italic(" [-]")))) +
+  theme_bw(base_family = "Times") +
+  theme(text=element_text(size=9.5)) +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor=element_blank(),
+        legend.justification =c(0,0.05), 
+        legend.position = c(0.05,0.05),
+        legend.background=element_rect(fill="white", size=0.5, linetype="solid", colour = "black"),
+        legend.title=element_blank(),
+        legend.key.height=unit(0.05, unit="cm"),
+        legend.key.width=unit(0.15, unit="cm"),
+        legend.direction = "horizontal", 
+        legend.key.size = unit(0.5,"cm"),
+        legend.text=element_text(size=6), 
+        axis.title.x = element_text(vjust=2),
+        axis.title.y=element_text(vjust=-1.5)) +
+  coord_trans(x= 'log10', y= 'log10', limx=c(0.05,500000), limy = c(0.001, 10000)) +
+  #annotate("text", x=c(2*10^6,2*10^6), y=c(15500,45000),label=c("+25%","-25%"),family="Times",colour="red",size=3) +
+  annotation_logticks(scaled=TRUE) +
+  #scale_x_continuous(breaks = trans_breaks("log10", function(x) log(x)), labels = trans_format("log10", math_format(10^.x))) +
+  #scale_y_continuous(breaks = trans_breaks("log10", function(x) log(x)), labels = trans_format("log10", math_format(10^.x))) +
+  stat_function(fun = function(x) 455/x,  xlim=c(3000,70000)   ,   linetype="solid", colour="black", size =0.3) +
+  stat_function(fun = function(x) 1.25*455/x, xlim=c(3000,70000)  ,   linetype="dashed", colour="red", size=0.25)  +
+  stat_function(fun = function(x) 0.75*455/x, xlim=c(3000,70000)  ,   linetype="dashed", colour="red", size=0.25)  +
+  stat_function(fun = function(x) 0.0065 ,   xlim=c(70000,400000), linetype="solid", colour="black", size=0.25)   +
+  stat_function(fun = function(x) 0.0065*0.75 ,   xlim=c(70000,400000), linetype="dashed", colour="red", size=0.25)    +
+  stat_function(fun = function(x) 0.0065*1.25 ,   xlim=c(70000,400000), linetype="dashed", colour="red", size=0.25) +
+  ggsave("sz.png", width = 10, height= 9, units = "cm", dpi=1200)
+
+```
+
+무차원 수 비교를 위한 그래프
+``` {r}
+Fig = c( "Fig_1_re_vs_ca_trend_shape_geo_col_None.png"
+        ,"Fig_2_st_vs_pe_under_we_150_shape_None_col_None.png"
+        ,"Fig_3_st_vs_pe_over_we_150_shape_None_col_None.png"
+        ,"Fig_4_nu_vs_pe_under_we_150_shape_None_col_None.png"
+        ,"Fig_5_nu_vs_pe_over_we_150_shape_None_col_None.png"
+        ,"Fig_6_pe_vs_we_under_we_150_shape_refri_col_None.png"
+        ,"Fig_7_pe_vs_we_over_we_150_shape_param_dh_col_NOne.png"
+        ,"Fig_8_pe_vs_re_under_we_150_shape_refri_col_None.png"
+        ,"Fig_9_pe_vs_re_over_None_shape_refri_col_None.png"
+        ,"Fig_10_ca_vs_v_over_None_shape_refri_col_param_dh.png")
+
+# -----------------------------------------------------
+# Fig. 1. Re vs. Ca (shape=geo, col=None)
+td1=subset(df1
+           , source != 'Christensen'
+           & source != 'Jain et al.'
+           #& source != 'Rouhani'
+           #& source != 'Evangelisti and Lupoli'
+           #& source != 'Costa'
+           & source != 'Dix'
+           & source != 'Edelman'
+           & source != 'Chirstensen'
+           & source != 'Staub et al.') # data
+
+ggplot(data=td1, aes(y=we, x=, shape = factor(source))) +
+  geom_point(size = 2) +
+  #geom_smooth(method = "lm", formula = y ~ poly(x,3,raw=TRUE), span= 0.2, se=F, col = "black", linetype = "dashed", size = 0.5) +
+  theme_bw(base_family = "Times") +
+  scale_colour_manual(values = c("Red","Black","Blue", "Green", "Purple", "Yellow", "Orange", "Navy", "Grey", "Cyan")) +
+  scale_shape_manual(values=rep(c(1:18,65:90))) +
+  theme(panel.grid.major = element_blank()
+        , panel.grid.minor=element_blank()
+        , legend.text = element_text(size=5)
+        , legend.background=element_rect(fill="white", size=0.15, linetype="solid", colour = "black")
+        #, legend.justification =c("right","bottom")
+        , legend.position = c(0.8,0.1)
+        , legend.title=element_blank()
+        #, legend.spacing.x = unit(0.1, "pt")
+        #, legend.spacing.y = unit(0.1, "pt")
+        , legend.direction = "horizontal"
+        #, legend.box.margin = margin(0.001,0.001,0.001,0.001,"pt")
+        , legend.key.size = unit(0.001,"mm")
+        , legend.key = element_rect(size=1)
+        #, legend.text=element_text(size=4)
+        , axis.text = element_text(size = 6.5, colour = "black")
+        , axis.title.x = element_text(size= 8.5, vjust=1)
+        , axis.title.y= element_text(size=8.5, vjust=-1)) +
+  coord_trans(limx = c(0,1.0), limy = c(0,1.0)) +
+  labs(y=expression(paste(italic("Reynolds number "), italic(" [-]"))), x=expression(paste(italic("Capillary number  "), italic(" [-]")))) +
+  annotate("text", x=0.775, y=0.2,label="Geometries of channel",family="Times",colour="black",size=2) +
+  ggsave(Fig[1], height = 6.5, width = 8, unit = "cm", dpi = 1200)
+
+# -----------------------------------------------------
+# Fig. 2. St vs. Pe (shape=param_dh, col=None, condition = we <= 150)
+td2=subset(df1
+           , real_we <= 150
+           #& source != 'Christensen'
+           #& source != 'Jain et al.'
+           #& source != 'Rouhani'
+           #& source != 'Evangelisti and Lupoli'
+           #& source != 'Costa'
+           #& source != 'Dix'
+           #& source != 'Chirstensen'
+           #& source != 'Staub et al.'
+           #& source != 'Marchaterre et al.'
+           #& source != 'Bartolomei et al.'
+           #& source != 'Bibeau'
+           #& source != 'Maurer'
+           #& source != 'Zeitoun'
+           & source != 'Ferrell and Bylund') # data
+
+ggplot(data=td2, aes(y=st, x=pe, shape=factor(source))) +
+  geom_point(size = 2) +
+  geom_smooth(method = "lm", formula = y ~ poly(x,2, raw=TRUE), span= 0.2, se=F, col = "black", linetype = "dashed", size = 0.5) +
+  theme_bw(base_family = "Times") +
+  scale_colour_manual(values = c("Red","Black","Blue", "Green", "Purple", "Yellow", "Orange", "Navy", "Grey", "Cyan")) +
+  scale_shape_manual(values=rep(c(1:18,65:90))) +
+  theme(panel.grid.major = element_blank()
+        , panel.grid.minor=element_blank()
+        , legend.text = element_text(size=5)
+        , legend.background=element_rect(fill="white", size=0.15, linetype="solid", colour = "black")
+        , legend.justification =c("left","bottom")
+        , legend.position = c(0.05,0.05)
+        , legend.title=element_blank()
+        #, legend.spacing.x = unit(0.1, "pt")
+        #, legend.spacing.y = unit(0.1, "pt")
+        , legend.direction = "horizontal"
+        #, legend.box.margin = margin(0.001,0.001,0.001,0.001,"pt")
+        , legend.key.size = unit(0.001,"mm")
+        , legend.key = element_rect(size=1)
+        #, legend.text=element_text(size=4)
+        , axis.text = element_text(size = 6.5, colour = "black") 
+        , axis.title.x = element_text(size= 8.5, vjust=1)
+        , axis.title.y= element_text(size=8.5, vjust=-1)) +
+  coord_trans(limx = c(0,0.5), limy = c(0,1.0)) +
+  labs(y=expression(paste(italic("Stanton number "), italic(" [-]"))), x=expression(paste(italic("Peclet number  "), italic(" [-]")))) +
+  annotate("text", x=0.075, y=0.225,label="Hydraulic diameter",family="Times",colour="black",size=2) +
+  ggsave(Fig[2], height = 6.5, width = 8, unit = "cm", dpi = 1200)
+
+
+
+
+# -----------------------------------------------------
+# Fig. 3. St vs. Pe (shape=param_dh, col=None, condition = we > 150)
+td3=subset(df1, real_we > 150)
+           #& source != 'Christensen'
+           #& source != 'Jain et al.'
+           #& source != 'Rouhani'
+           #& source != 'Evangelisti and Lupoli'
+           #& source != 'Costa'
+           #& source != 'Dix'
+           #& source != 'Chirstensen'
+           #& source != 'Staub et al.'
+           #& source != 'Marchaterre et al.'
+           #& source != 'Bartolomei et al.'
+           #& source != 'Bibeau'
+           #& source != 'Ferrell and Bylund') # data
+
+ggplot(data=td3, aes(y=st, x=pe, shape=factor(param_dh))) +
+  geom_point(size = 2) +
+  geom_smooth(method = "lm", formula = y ~ poly(x,2,raw=TRUE), span= 0.2, se=F, col = "black", linetype = "dashed", size = 0.5) +
+  theme_bw(base_family = "Times") +
+  scale_colour_manual(values = c("Red","Black","Blue", "Green", "Purple", "Yellow", "Orange", "Navy", "Grey", "Cyan")) +
+  scale_shape_manual(values=rep(c(1:18,65:90))) +
+  theme(panel.grid.major = element_blank()
+        , panel.grid.minor=element_blank()
+        , legend.text = element_text(size=5)
+        , legend.background=element_rect(fill="white", size=0.15, linetype="solid", colour = "black")
+        , legend.justification =c("left","top")
+        , legend.position = c(0.05,0.95)
+        , legend.title=element_blank()
+        #, legend.spacing.x = unit(0.1, "pt")
+        #, legend.spacing.y = unit(0.1, "pt")
+        , legend.direction = "horizontal"
+        #, legend.box.margin = margin(0.001,0.001,0.001,0.001,"pt")
+        , legend.key.size = unit(0.001,"mm")
+        , legend.key = element_rect(size=1)
+        #, legend.text=element_text(size=4)
+        , axis.text = element_text(size = 6.5, colour = "black") 
+        , axis.title.x = element_text(size= 8.5, vjust=1)
+        , axis.title.y= element_text(size=8.5, vjust=-1)) +
+  coord_trans(limx = c(0.45,1.0), limy = c(0,1.0)) +
+  labs(y=expression(paste(italic("Stanton number "), italic(" [-]"))), x=expression(paste(italic("Peclet number  "), italic(" [-]")))) +
+  annotate("text", x=0.54, y=0.975,label="Hydraulic diameter",family="Times",colour="black",size=2) +
+  ggsave(Fig[3], height = 6.5, width = 8, unit = "cm", dpi = 1200)
+
+# -----------------------------------------------------
+# Fig. 4. Nu vs. Pe (shape=param_dh, col=None, condition = we <= 150)
+td4=subset(df1, real_we <= 150)
+
+ggplot(data=td4, aes(y=nu, x=pe, shape = factor(source))) +
+  geom_point(size = 2) +
+  geom_smooth(method = "lm", formula = y ~ poly(x,2,raw=TRUE), span= 0.2, se=F, col = "black", linetype = "dashed", size = 0.5) +
+  theme_bw(base_family = "Times") +
+  scale_colour_manual(values = c("Red","Black","Blue", "Green", "Purple", "Yellow", "Orange", "Navy", "Grey", "Cyan")) +
+  scale_shape_manual(values=rep(c(1:18,65:90))) +
+  theme(panel.grid.major = element_blank()
+        , panel.grid.minor=element_blank()
+        , legend.text = element_text(size=5)
+        , legend.background=element_rect(fill="white", size=0.15, linetype="solid", colour = "black")
+        , legend.justification =c("left","top")
+        , legend.position = c(0.05,0.95)
+        , legend.title=element_blank()
+        #, legend.spacing.x = unit(0.1, "pt")
+        #, legend.spacing.y = unit(0.1, "pt")
+        , legend.direction = "horizontal"
+        #, legend.box.margin = margin(0.001,0.001,0.001,0.001,"pt")
+        , legend.key.size = unit(0.001,"mm")
+        , legend.key = element_rect(size=1)
+        #, legend.text=element_text(size=4)
+        , axis.text = element_text(size = 6.5, colour = "black") 
+        , axis.title.x = element_text(size= 8.5, vjust=1)
+        , axis.title.y = element_text(size=8.5, vjust=-1)) +
+  coord_trans(limx = c(0,0.35), limy = c(0,1.0)) +
+  labs(y=expression(paste(italic("Nusselt number "), italic(" [-]"))), x=expression(paste(italic("Peclet number  "), italic(" [-]")))) +
+  annotate("text", x=0.055, y=0.975,label="Hydraulic diameter",family="Times",colour="black",size=2) +
+  ggsave(Fig[4], height = 6.5, width = 8, unit = "cm", dpi = 1200)
+
+# -----------------------------------------------------
+# Fig. 5. Nu vs. Pe (shape=param_dh, col=None, condition = we > 150), 이거 그릴 떄는 rmse error < 0.2 이하로 재설정
+td5=subset(df1
+           , real_we > 150
+           & source != 'Labuntsov et al.'
+           #& source != 'Ferrell and Bylund'
+           #& source != 'Jain et al.'
+           #& source != 'Rouhani'
+           #& source != 'Maurer'
+           #& source != 'Evangelisti and Lupoli'
+           #& source != 'Costa'
+           #& source != 'Dix'
+           #& source != 'Egen et al.'
+           #& source != 'Chirstensen'
+           & source != 'Staub et al.'
+           #& source != 'Marchaterre et al.'
+           #& source != 'Bartolomei et al.'
+           #& source != 'Bartolomei and Chanturiya'
+           #& source != 'Bibeau'
+           & source != 'Foglia et al.'
+           & source != 'Christensen') # data
+
+ggplot(data=td5, aes(y=nu, x=pe, shape = factor(param_dh))) +
+  geom_point(size = 2) +
+  geom_smooth(method = "lm", formula = y ~ poly(x,2,raw=TRUE), span= 0.2, se=F, col = "black", linetype = "dashed", size = 0.5) +
+  theme_bw(base_family = "Times") +
+  scale_colour_manual(values = c("Red","Black","Blue", "Green", "Purple", "Yellow", "Orange", "Navy", "Grey", "Cyan")) +
+  scale_shape_manual(values=rep(c(1:18,65:90))) +
+  theme(panel.grid.major = element_blank()
+        , panel.grid.minor=element_blank()
+        , legend.text = element_text(size=5)
+        , legend.background=element_rect(fill="white", size=0.15, linetype="solid", colour = "black")
+        , legend.justification =c("right","bottom")
+        , legend.position = c(0.95,0.05)
+        , legend.title=element_blank()
+        #, legend.spacing.x = unit(0.1, "pt")
+        #, legend.spacing.y = unit(0.1, "pt")
+        , legend.direction = "horizontal"
+        #, legend.box.margin = margin(0.001,0.001,0.001,0.001,"pt")
+        , legend.key.size = unit(0.001,"mm")
+        , legend.key = element_rect(size=1)
+        #, legend.text=element_text(size=4)
+        , axis.text = element_text(size = 6.5, colour = "black") 
+        , axis.title.x = element_text(size= 8.5, vjust=1)
+        , axis.title.y= element_text(size=8.5, vjust=-1)) +
+  coord_trans(limx = c(0,1.00), limy = c(0,1)) +
+  labs(y=expression(paste(italic("Nusselt number "), italic(" [-]"))), x=expression(paste(italic("Peclet number  "), italic(" [-]")))) +
+  annotate("text", x=0.725, y=0.225,label="Hydraulic diameter",family="Times",colour="black",size=2) +
+  ggsave(Fig[5], height = 6.5, width = 8, unit = "cm", dpi = 1200)
+
+# -----------------------------------------------------
+# Fig. 6. Pe vs. We (shape=refri, col=None, condition = we <= 150)
+td6=subset(df1
+           , real_we <= 150
+           #& source != 'Labuntsov et al.'
+           #& source != 'Ferrell and Bylund'
+           #& source != 'Jain et al.'
+           #& source != 'Rouhani'
+           #& source != 'Maurer'
+           #& source != 'Evangelisti and Lupoli'
+           #& source != 'Costa'
+           #& source != 'Dix'
+           #& source != 'Egen et al.'
+           #& source != 'Chirstensen'
+           #& source != 'Staub et al.'
+           #& source != 'Marchaterre et al.'
+           #& source != 'Bartolomei et al.'
+           #& source != 'Bartolomei and Chanturiya'
+           #& source != 'Bibeau'
+           #& source != 'Foglia et al.'
+           & source != 'Christensen') # data
+
+ggplot(data=td6, aes(y=pe, x=we, shape = factor(refri))) +
+  geom_point(size = 2) +
+  geom_smooth(method = "lm", formula = y ~ poly(x,2,raw=TRUE), span= 0.2, se=F, col = "black", linetype = "dashed", size = 0.5) +
+  theme_bw(base_family = "Times") +
+  scale_colour_manual(values = c("Red","Black","Blue", "Green", "Purple", "Yellow", "Orange", "Navy", "Grey", "Cyan")) +
+  scale_shape_manual(values=rep(c(1:18,65:90))) +
+  theme(panel.grid.major = element_blank()
+        , panel.grid.minor=element_blank()
+        , legend.text = element_text(size=5)
+        , legend.background=element_rect(fill="white", size=0.15, linetype="solid", colour = "black")
+        , legend.justification =c("right","bottom")
+        , legend.position = c(0.95,0.05)
+        , legend.title=element_blank()
+        #, legend.spacing.x = unit(0.1, "pt")
+        #, legend.spacing.y = unit(0.1, "pt")
+        , legend.direction = "horizontal"
+        #, legend.box.margin = margin(0.001,0.001,0.001,0.001,"pt")
+        , legend.key.size = unit(0.001,"mm")
+        , legend.key = element_rect(size=1)
+        #, legend.text=element_text(size=4)
+        , axis.text = element_text(size = 6.5, colour = "black") 
+        , axis.title.x = element_text(size= 8.5, vjust=1)
+        , axis.title.y= element_text(size=8.5, vjust=-1)) +
+  coord_trans(limx = c(0,0.4), limy = c(0,1)) +
+  labs(y=expression(paste(italic("Peclet number "), italic(" [-]"))), x=expression(paste(italic("Weber number  "), italic(" [-]")))) +
+  #annotate("text", x=0.775, y=0.2,label="Geometries of channel",family="Times",colour="black",size=2) +
+  ggsave(Fig[6], height = 6.5, width = 8, unit = "cm", dpi = 1200)
+
+# -----------------------------------------------------
+# Fig. 7. Pe vs. We (shape=param_dh, col=None, condition = we > 150)
+td7=subset(df1
+           , real_we > 150
+           #& source != 'Labuntsov et al.'
+           #& source != 'Ferrell and Bylund'
+           & source != 'Jain et al.'
+           #& source != 'Rouhani'
+           #& source != 'Maurer'
+           #& source != 'Evangelisti and Lupoli'
+           #& source != 'Costa'
+           #& source != 'Dix'
+           #& source != 'Egen et al.'
+           #& source != 'Staub et al.'
+           #& source != 'Marchaterre et al.'
+           #& source != 'Bartolomei et al.'
+           #& source != 'Bartolomei and Chanturiya'
+           #& source != 'Bibeau'
+           #& source != 'Foglia et al.'
+           & source != 'Christensen') # data
+
+ggplot(data=td7, aes(y=pe, x=we, shape = factor(param_dh))) +
+  geom_point(size = 2) +
+  geom_smooth(method = "lm", formula = y ~ poly(x,3,raw=TRUE), span= 0.2, se=F, col = "black", linetype = "dashed", size = 0.5) +
+  theme_bw(base_family = "Times") +
+  scale_colour_manual(values = c("Red","Black","Blue", "Green", "Purple", "Yellow", "Orange", "Navy", "Grey", "Cyan")) +
+  scale_shape_manual(values=rep(c(1:18,65:90))) +
+  theme(panel.grid.major = element_blank()
+        , panel.grid.minor=element_blank()
+        , legend.text = element_text(size=5)
+        , legend.background=element_rect(fill="white", size=0.15, linetype="solid", colour = "black")
+        , legend.justification =c("right","bottom")
+        , legend.position = c(0.95,0.05)
+        , legend.title=element_blank()
+        #, legend.spacing.x = unit(0.1, "pt")
+        #, legend.spacing.y = unit(0.1, "pt")
+        , legend.direction = "horizontal"
+        #, legend.box.margin = margin(0.001,0.001,0.001,0.001,"pt")
+        , legend.key.size = unit(0.001,"mm")
+        , legend.key = element_rect(size=1)
+        #, legend.text=element_text(size=4)
+        , axis.text = element_text(size = 6.5, colour = "black") 
+        , axis.title.x = element_text(size= 8.5, vjust=1)
+        , axis.title.y= element_text(size=8.5, vjust=-1)) +
+  coord_trans(limx = c(0.4,1), limy = c(0,1.0)) +
+  labs(y=expression(paste(italic("Peclet number "), italic(" [-]"))), x=expression(paste(italic("Weber number  "), italic(" [-]")))) +
+  annotate("text", x=0.9, y=0.425,label="Hydraulic diameter",family="Times",colour="black",size=2) +
+  ggsave(Fig[7], height = 6.5, width = 8, unit = "cm", dpi = 1200)
+
+# -----------------------------------------------------
+# Fig. 8. Pe vs. Re (shape=refri, col=None, condition = we <= 150)
+td8=subset(df1
+           , real_we <= 150
+           #& source != 'Labuntsov et al.'
+           #& source != 'Ferrell and Bylund'
+           & source != 'Jain et al.'
+           & source != 'Rouhani'
+           #& source != 'Maurer'
+           #& source != 'Evangelisti and Lupoli'
+           #& source != 'Costa'
+           #& source != 'Dix'
+           #& source != 'Egen et al.'
+           #& source != 'Chirstensen'
+           #& source != 'Staub et al.'
+           #& source != 'Marchaterre et al.'
+           #& source != 'Bartolomei et al.'
+           #& source != 'Bartolomei and Chanturiya'
+           #& source != 'Bibeau'
+           #& source != 'Foglia et al.'
+           & source != 'Christensen') # data
+
+ggplot(data=td8, aes(y=pe, x=re, shape = factor(refri))) +
+  geom_point(size = 2) +
+  geom_smooth(method = "lm", formula = y ~ poly(x,2,raw=TRUE), span= 0.2, se=F, col = "black", linetype = "dashed", size = 0.5) +
+  theme_bw(base_family = "Times") +
+  scale_colour_manual(values = c("Red","Black","Blue", "Green", "Purple", "Yellow", "Orange", "Navy", "Grey", "Cyan")) +
+  scale_shape_manual(values=rep(c(1:18,65:90))) +
+  theme(panel.grid.major = element_blank()
+        , panel.grid.minor=element_blank()
+        , legend.text = element_text(size=5)
+        , legend.background=element_rect(fill="white", size=0.15, linetype="solid", colour = "black")
+        , legend.justification =c("right","bottom")
+        , legend.position = c(0.95,0.05)
+        , legend.title=element_blank()
+        #, legend.spacing.x = unit(0.1, "pt")
+        #, legend.spacing.y = unit(0.1, "pt")
+        , legend.direction = "horizontal"
+        #, legend.box.margin = margin(0.001,0.001,0.001,0.001,"pt")
+        , legend.key.size = unit(0.001,"mm")
+        , legend.key = element_rect(size=1)
+        #, legend.text=element_text(size=4)
+        , axis.text = element_text(size = 6.5, colour = "black") 
+        , axis.title.x = element_text(size= 8.5, vjust=1)
+        , axis.title.y= element_text(size=8.5, vjust=-1)) +
+  coord_trans(limx = c(0,0.45), limy = c(0,0.45)) +
+  labs(y=expression(paste(italic("Peclet number "), italic(" [-]"))), x=expression(paste(italic("Reynolds number  "), italic(" [-]")))) +
+  #annotate("text", x=0.9, y=0.425,label="Hydraulic diameter",family="Times",colour="black",size=2) +
+  ggsave(Fig[8], height = 6.5, width = 8, unit = "cm", dpi = 1200)
+
+# -----------------------------------------------------
+# Fig. 9. Pe vs. Re (shape=refri, col=None, condition = None)
+td9=subset(df1,
+           #, real_we > 150
+            source != 'Labuntsov et al.'
+           #& source != 'Ferrell and Bylund'
+           & source != 'Jain et al.'
+           #& source != 'Rouhani'
+           & source != 'Maurer'
+           #& source != 'Evangelisti and Lupoli'
+           #& source != 'Costa'
+           #& source != 'Dix'
+           #& source != 'Egen et al.'
+           & source != 'Chirstensen'
+           #& source != 'Staub et al.'
+           #& source != 'Marchaterre et al.'
+           #& source != 'Bartolomei et al.'
+           #& source != 'Bartolomei and Chanturiya'
+           #& source != 'Bibeau'
+           & source != 'Foglia et al.'
+           & source != 'Christensen') # data
+
+ggplot(data=td9, aes(y=pe, x=re, shape = factor(refri))) +
+  geom_point(size = 2) +
+  geom_smooth(method = "lm", formula = y ~ poly(x,2,raw=TRUE), span= 0.2, se=F, col = "black", linetype = "dashed", size = 0.5) +
+  theme_bw(base_family = "Times") +
+  scale_colour_manual(values = c("Red","Black","Blue", "Green", "Purple", "Yellow", "Orange", "Navy", "Grey", "Cyan")) +
+  scale_shape_manual(values=rep(c(1:18,65:90))) +
+  theme(panel.grid.major = element_blank()
+        , panel.grid.minor=element_blank()
+        , legend.text = element_text(size=5)
+        , legend.background=element_rect(fill="white", size=0.15, linetype="solid", colour = "black")
+        , legend.justification =c("right","bottom")
+        , legend.position = c(0.95,0.05)
+        , legend.title=element_blank()
+        #, legend.spacing.x = unit(0.1, "pt")
+        #, legend.spacing.y = unit(0.1, "pt")
+        , legend.direction = "horizontal"
+        #, legend.box.margin = margin(0.001,0.001,0.001,0.001,"pt")
+        , legend.key.size = unit(0.001,"mm")
+        , legend.key = element_rect(size=1)
+        #, legend.text=element_text(size=4)
+        , axis.text = element_text(size = 6.5, colour = "black") 
+        , axis.title.x = element_text(size= 8.5, vjust=1)
+        , axis.title.y= element_text(size=8.5, vjust=-1)) +
+  coord_trans(limx = c(0,1), limy = c(0,1)) +
+  labs(y=expression(paste(italic("Peclet number "), italic(" [-]"))), x=expression(paste(italic("Reynolds number  "), italic(" [-]")))) +
+  #annotate("text", x=0.9, y=0.425,label="Hydraulic diameter",family="Times",colour="black",size=2) +
+  ggsave(Fig[9], height = 6.5, width = 8, unit = "cm", dpi = 1200)
+
+# -----------------------------------------------------
+# Fig. 10. Ca vs. v (shape=refri, col=param_dh, condition = None)
+td10=subset(df1, 
+           #, real_we > 150
+           #& source != 'Labuntsov et al.'
+           #& source != 'Ferrell and Bylund'
+           #& source != 'Jain et al.'
+           #& source != 'Rouhani'
+           #& source != 'Maurer'
+           #& source != 'Evangelisti and Lupoli'
+           #& source != 'Costa'
+           #& source != 'Dix'
+           #& source != 'Egen et al.'
+           #& source != 'Chirstensen'
+           #& source != 'Staub et al.'
+           #& source != 'Marchaterre et al.'
+           #& source != 'Bartolomei et al.'
+           #& source != 'Bartolomei and Chanturiya'
+           #& source != 'Bibeau'
+           #& source != 'Foglia et al.'
+            source != 'Christensen') # data
+
+ggplot(data=td10, aes(y=ca, x=v, shape = factor(refri), col=factor(param_p))) +
+  geom_point(size = 2) +
+  geom_smooth(method = "lm", formula = y ~ poly(x,2,raw=TRUE), span= 0.2, se=F, col = "black", linetype = "dashed", size = 0.5) +
+  theme_bw(base_family = "Times") +
+  scale_colour_manual(values = c("Red","Black","Blue", "Green", "Purple", "Yellow", "Cyan", "Navy", "Grey", "Orange" )) +
+  scale_shape_manual(values=rep(c(1:18,65:90))) +
+  theme(panel.grid.major = element_blank()
+        , panel.grid.minor=element_blank()
+        , legend.text = element_text(size=5)
+        , legend.background=element_rect(fill="white", size=0.15, linetype="solid", colour = "black")
+        , legend.justification =c("right","bottom")
+        , legend.position = c(0.95,0.05)
+        , legend.title=element_blank()
+        #, legend.spacing.x = unit(0.1, "pt")
+        #, legend.spacing.y = unit(0.1, "pt")
+        , legend.direction = "horizontal"
+        #, legend.box.margin = margin(0.001,0.001,0.001,0.001,"pt")
+        , legend.key.size = unit(0.001,"mm")
+        , legend.key = element_rect(size=1)
+        #, legend.text=element_text(size=4)
+        , axis.text = element_text(size = 6.5, colour = "black") 
+        , axis.title.x = element_text(size= 8.5, vjust=1)
+        , axis.title.y= element_text(size=8.5, vjust=-1)) +
+  coord_trans(limx = c(0,1), limy = c(0,1.05)) +
+  labs(y=expression(paste(italic("Capillary number "), italic(" [-]"))), x=expression(paste(italic("Velocity  "), italic(" [m/s]")))) +
+  #annotate("text", x=0.9, y=0.425,label="Hydraulic diameter",family="Times",colour="black",size=2) +
+  ggsave(Fig[10], height = 6.5, width = 8, unit = "cm", dpi = 1200)
+
+```
+
+Equlibrium quality를 비교하기 위한 그래프
+```{r}
+Fig_rmse = c( "Fig_11_rmse_vs_js_under_we_150_shape_source_col_geo.png"
+            , "Fig_12_rmse_vs_js_over_we_150_shape_source_col_geo.png"
+            , "Fig_13_rmse_vs_sz_under_we_150_shape_source_col_geo.png"
+            , "Fig_14_rmse_vs_sz_over_we_150_shape_source_col_geo.png"
+            , "Fig_15_rmse_vs_levy_under_we_150_shape_source_col_geo.png"
+            , "Fig_16_rmse_vs_levy_over_we_150_shape_source_col_geo.png"
+            , "Fig_17_rmse_vs_bowr_under_we_150_shape_source_col_geo.png"
+            , "Fig_18_rmse_vs_bowr_over_we_150_shape_source_col_geo.png"
+            , "Fig_19_rmse_vs_ha2005_under_we_150_shape_source_col_geo.png"
+            , "Fig_20_rmse_vs_ha2005_over_we_150_shape_source_col_geo.png"
+            , "Fig_21_rmse_vs_ha2018_under_we_150_shape_source_col_geo.png"
+            , "Fig_22_rmse_vs_ha2018_over_we_150_shape_source_col_geo.png"
+            , "Fig_23_rmse_vs_unal_under_we_150_shape_source_col_geo.png"
+            , "Fig_24_rmse_vs_unal_over_we_150_shape_source_col_geo.png"
+            , "Fig_25_rmse_vs_js_all_shape_source_col_geo.png")
+
+# -----------------------------------------------------
+# Fig. 11. x_rmse vs. x_corr (shape=source, col=geo, cor = new, condition = we <= 150)
+rmse_tb = dbGetQuery(con, "SELECT a.*, b.source, b.flow, b.geo, b.hsur, c.param_dh, c.param_st, c.param_re, c.param_q, c.param_g, c.param_p, c.param_ca, c.param_we, c.param_pe, b.we
+                           FROM rmse_osv_tb a
+                           INNER JOIN prop_osv_tb b
+                           ON a.index = b.index
+                           INNER JOIN dimnsl_param_quan_prop_tb c
+                           ON b.index = c.index
+                           WHERE ABS(a.rmse_js) < 0.5;")
+rmse_tb_1 = subset(rmse_tb,
+            we <= 150)
+           #& source != 'Labuntsov et al.'
+           #& source != 'Ferrell and Bylund'
+           #& source != 'Jain et al.'
+           #& source != 'Rouhani'
+           #& source != 'Maurer'
+           #& source != 'Evangelisti and Lupoli'
+           #& source != 'Costa'
+           #& source != 'Dix'
+           #& source != 'Egen et al.'
+           #& source != 'Chirstensen'
+           #& source != 'Staub et al.'
+           #& source != 'Marchaterre et al.'
+           #& source != 'Bartolomei et al.'
+           #& source != 'Bartolomei and Chanturiya'
+           #& source != 'Bibeau'
+           #& source != 'Foglia et al.'
+           #& source != 'Christensen') # data
+
+
+ggplot(data=rmse_tb_1, aes(x=x_js, y=rmse_js*100, shape=factor(source), col=factor(geo))) +
+  geom_point(size=2) + theme_bw(base_family = "Times") +
+  geom_hline(yintercept=0) + geom_hline(yintercept=-30, lty = 'dashed') +
+  geom_hline(yintercept=30, lty = 'dashed') +
+  scale_shape_manual(values=rep(c(1:18,65:90))) +
+  scale_colour_manual(values = c("Red","Black","Blue")) +
+  theme(
+         panel.grid.major = element_blank()
+        , panel.grid.minor=element_blank()
+        , legend.text = element_text(size=5)
+        , legend.background=element_rect(fill="white", size=0.15, linetype="solid", colour = "black")
+        , legend.justification =c("right","top")
+        #, legend.position = c(0.05,0.95)
+        , legend.title=element_blank()
+        , legend.spacing.x = unit(1, "pt")
+        , legend.key.height = unit(2.5,"mm")
+        , legend.spacing.y = unit(1, "pt")
+        #, legend.direction = "horizontal"
+        #, legend.box.margin = margin(0.001,0.001,0.001,0.001,"pt")
+        , legend.key.size = unit(1,"mm")
+        , legend.key = element_rect(size=1)
+        #, legend.text=element_text(size=4)
+        , axis.text = element_text(size = 6.5, colour = "black") 
+        , axis.title.x = element_text(size= 8.5, vjust=1)
+        , axis.title.y= element_text(size=8.5, vjust=-1)) +
+  coord_trans(limx = c(0,-0.2), limy = c(-100,100)) +
+  labs(y=expression(paste(italic("Relative deviation of "), italic(RMSPE), italic(" [-]"))), x=expression(paste(italic("Calculated thermal quality, "), italic(X[OSV]), italic(" [-]")))) +
+  annotate("text", x=c(-0.18,-0.18), y=c(-35,35),label=c("-30%","+30%"),family="Times",colour="red",size=2) +
+  ggsave(Fig_rmse[1], height = 6.5, width = 8, unit = "cm", dpi = 1600)
+
+# -----------------------------------------------------
+# Fig. 12. x_rmse vs. x_corr (shape=source, col=geo, cor = new, condition = we > 150)
+rmse_tb_2 = subset(rmse_tb,
+            we > 150)
+           #& source != 'Labuntsov et al.'
+           #& source != 'Ferrell and Bylund'
+           #& source != 'Jain et al.'
+           #& source != 'Rouhani'
+           #& source != 'Maurer'
+           #& source != 'Evangelisti and Lupoli'
+           #& source != 'Costa'
+           #& source != 'Dix'
+           #& source != 'Egen et al.'
+           #& source != 'Chirstensen'
+           #& source != 'Staub et al.'
+           #& source != 'Marchaterre et al.'
+           #& source != 'Bartolomei et al.'
+           #& source != 'Bartolomei and Chanturiya'
+           #& source != 'Bibeau'
+           #& source != 'Foglia et al.'
+           #& source != 'Christensen') # data
+
+
+ggplot(data=rmse_tb_2, aes(x=x_js, y=rmse_js, shape=factor(hsur), col=factor(geo))) +
+  geom_point(size=2) + theme_bw(base_family = "Times") +
+  geom_hline(yintercept=0) + geom_hline(yintercept=-0.3, lty = 'dashed') +
+  geom_hline(yintercept=0.3, lty = 'dashed') +
+  scale_shape_manual(values=rep(c(1:18,65:90))) +
+  scale_colour_manual(values = c("Red","Black","Blue")) +
+  theme(
+         panel.grid.major = element_blank()
+        , panel.grid.minor=element_blank()
+        , legend.text = element_text(size=5)
+        , legend.background=element_rect(fill="white", size=0.15, linetype="solid", colour = "black")
+        , legend.justification =c("right","top")
+        #, legend.position = c(0.05,0.95)
+        , legend.title=element_blank()
+        , legend.spacing.x = unit(1, "pt")
+        , legend.key.height = unit(2.5,"mm")
+        , legend.spacing.y = unit(1, "pt")
+        #, legend.direction = "horizontal"
+        #, legend.box.margin = margin(0.001,0.001,0.001,0.001,"pt")
+        , legend.key.size = unit(1,"mm")
+        , legend.key = element_rect(size=1)
+        #, legend.text=element_text(size=4)
+        , axis.text = element_text(size = 6.5, colour = "black") 
+        , axis.title.x = element_text(size= 8.5, vjust=1)
+        , axis.title.y= element_text(size=8.5, vjust=-1)) +
+  coord_trans(limx = c(0,-0.2), limy = c(-1,1)) +
+  labs(y=expression(paste(italic("Relative deviation of "), italic(X[RMSE]), italic(" [-]"))), x=expression(paste(italic(X[OSV-Calculated]), italic(" [-]")))) +
+  annotate("text", x=c(-0.18,-0.18), y=c(-0.35,0.35),label=c("-30%","+30%"),family="Times",colour="red",size=2) +
+  ggsave(Fig_rmse[2], height = 6.5, width = 8, unit = "cm", dpi = 1600)
+
+# -----------------------------------------------------
+# Fig. 13. x_rmse vs. x_corr (shape=source, col=geo, cor = sz, condition = we <= 150)
+rmse_tb = dbGetQuery(con, "SELECT a.*, b.source, b.flow, b.geo, b.hsur, c.param_dh, c.param_st, c.param_re, c.param_q, c.param_g, c.param_p, c.param_ca, c.param_we, c.param_pe, b.we
+                           FROM rmse_osv_tb a
+                           INNER JOIN prop_osv_tb b
+                           ON a.index = b.index
+                           INNER JOIN dimnsl_param_quan_prop_tb c
+                           ON b.index = c.index
+                           WHERE ABS(a.rmse_sz) > 0.3;")
+rmse_tb_1 = subset(rmse_tb,
+            we <= 150)
+           #& source != 'Labuntsov et al.'
+           #& source != 'Ferrell and Bylund'
+           #& source != 'Jain et al.'
+           #& source != 'Rouhani'
+           #& source != 'Maurer'
+           #& source != 'Evangelisti and Lupoli'
+           #& source != 'Costa'
+           #& source != 'Dix'
+           #& source != 'Egen et al.'
+           #& source != 'Chirstensen'
+           #& source != 'Staub et al.'
+           #& source != 'Marchaterre et al.'
+           #& source != 'Bartolomei et al.'
+           #& source != 'Bartolomei and Chanturiya'
+           #& source != 'Bibeau'
+           #& source != 'Foglia et al.'
+           #& source != 'Christensen') # data
+
+
+ggplot(data=rmse_tb_1, aes(x=x_sz, y=rmse_sz, shape=factor(source), col=factor(geo))) +
+  geom_point(size=2) + theme_bw(base_family = "Times") +
+  geom_hline(yintercept=0) + geom_hline(yintercept=-0.3, lty = 'dashed') +
+  geom_hline(yintercept=0.3, lty = 'dashed') +
+  scale_shape_manual(values=rep(c(1:18,65:90))) +
+  scale_colour_manual(values = c("Red","Black","Blue")) +
+  theme(
+         panel.grid.major = element_blank()
+        , panel.grid.minor=element_blank()
+        , legend.text = element_text(size=5)
+        , legend.background=element_rect(fill="white", size=0.15, linetype="solid", colour = "black")
+        , legend.justification =c("right","top")
+        #, legend.position = c(0.05,0.95)
+        , legend.title=element_blank()
+        , legend.spacing.x = unit(1, "pt")
+        , legend.key.height = unit(2.5,"mm")
+        , legend.spacing.y = unit(1, "pt")
+        #, legend.direction = "horizontal"
+        #, legend.box.margin = margin(0.001,0.001,0.001,0.001,"pt")
+        , legend.key.size = unit(1,"mm")
+        , legend.key = element_rect(size=1)
+        #, legend.text=element_text(size=4)
+        , axis.text = element_text(size = 6.5, colour = "black") 
+        , axis.title.x = element_text(size= 8.5, vjust=1)
+        , axis.title.y= element_text(size=8.5, vjust=-1)) +
+  coord_trans(limx = c(0,-0.2), limy = c(-1,1)) +
+  labs(y=expression(paste(italic("Relative deviation of "), italic(X[RMSE]), italic(" [-]"))), x=expression(paste(italic(X[OSV-Calculated]), italic(" [-]")))) +
+  annotate("text", x=c(-0.18,-0.18), y=c(-0.35,0.35),label=c("-30%","+30%"),family="Times",colour="red",size=2) +
+  ggsave(Fig_rmse[3], height = 6.5, width = 8, unit = "cm", dpi = 1600)
+
+
+# -----------------------------------------------------
+# Fig. 14. x_rmse vs. x_corr (shape=source, col=geo, cor = sz, condition = we > 150)
+rmse_tb_2 = subset(rmse_tb,
+            we > 150
+           #& source != 'Labuntsov et al.'
+           #& source != 'Ferrell and Bylund'
+           #& source != 'Jain et al.'
+           #& source != 'Rouhani'
+           #& source != 'Maurer'
+           #& source != 'Evangelisti and Lupoli'
+           #& source != 'Costa'
+           #& source != 'Dix'
+           #& source != 'Egen et al.'
+           #& source != 'Chirstensen'
+           #& source != 'Staub et al.'
+           #& source != 'Marchaterre et al.'
+           #& source != 'Bartolomei et al.'
+           #& source != 'Bartolomei and Chanturiya'
+           #& source != 'Bibeau'
+          #& source != 'Stangle and Mayinger'
+           #& source != 'Foglia et al.'
+            & source != 'Christensen') # data
+
+
+ggplot(data=rmse_tb_2, aes(x=x_sz, y=rmse_sz, shape=factor(source), col=factor(geo))) +
+  geom_point(size=2) + theme_bw(base_family = "Times") +
+  geom_hline(yintercept=0) + geom_hline(yintercept=-0.3, lty = 'dashed') +
+  geom_hline(yintercept=0.3, lty = 'dashed') +
+  scale_shape_manual(values=rep(c(1:18,65:90))) +
+  scale_colour_manual(values = c("Red","Black","Blue")) +
+  theme(
+         panel.grid.major = element_blank()
+        , panel.grid.minor=element_blank()
+        , legend.text = element_text(size=5)
+        , legend.background=element_rect(fill="white", size=0.15, linetype="solid", colour = "black")
+        , legend.justification =c("right","top")
+        #, legend.position = c(0.05,0.95)
+        , legend.title=element_blank()
+        , legend.spacing.x = unit(1, "pt")
+        , legend.key.height = unit(2,"mm")
+        , legend.spacing.y = unit(1, "pt")
+        #, legend.direction = "horizontal"
+        #, legend.box.margin = margin(0.001,0.001,0.001,0.001,"pt")
+        , legend.key.size = unit(0.25,"mm")
+        , legend.key = element_rect(size=0.5)
+        #, legend.text=element_text(size=4)
+        , axis.text = element_text(size = 6.5, colour = "black") 
+        , axis.title.x = element_text(size= 8.5, vjust=1)
+        , axis.title.y= element_text(size=8.5, vjust=-1)) +
+  coord_trans(limx = c(0,-0.2), limy = c(-1,1)) +
+  labs(y=expression(paste(italic("Relative deviation of "), italic(X[RMSE]), italic(" [-]"))), x=expression(paste(italic(X[OSV-Calculated]), italic(" [-]")))) +
+  annotate("text", x=c(-0.18,-0.18), y=c(-0.35,0.35),label=c("-30%","+30%"),family="Times",colour="red",size=2) +
+  ggsave(Fig_rmse[4], height = 6.5, width = 8, unit = "cm", dpi = 1600)
+
+# -----------------------------------------------------
+# Fig. 15. x_rmse vs. x_corr (shape=source, col=geo, cor = levy, condition = we <= 150)
+rmse_tb = dbGetQuery(con, "SELECT a.*, b.source, b.flow, b.geo, b.hsur, c.param_dh, c.param_st, c.param_re, c.param_q, c.param_g, c.param_p, c.param_ca, c.param_we, c.param_pe, b.we
+                           FROM rmse_osv_tb a
+                           INNER JOIN prop_osv_tb b
+                           ON a.index = b.index
+                           INNER JOIN dimnsl_param_quan_prop_tb c
+                           ON b.index = c.index
+                           WHERE ABS(a.rmse_levy) > 0.3;")
+rmse_tb_1 = subset(rmse_tb,
+            we <= 150)
+           #& source != 'Labuntsov et al.'
+           #& source != 'Ferrell and Bylund'
+           #& source != 'Jain et al.'
+           #& source != 'Rouhani'
+           #& source != 'Maurer'
+           #& source != 'Evangelisti and Lupoli'
+           #& source != 'Costa'
+           #& source != 'Dix'
+           #& source != 'Egen et al.'
+           #& source != 'Chirstensen'
+           #& source != 'Staub et al.'
+           #& source != 'Marchaterre et al.'
+           #& source != 'Bartolomei et al.'
+           #& source != 'Bartolomei and Chanturiya'
+           #& source != 'Bibeau'
+           #& source != 'Foglia et al.'
+           #& source != 'Christensen') # data
+
+
+ggplot(data=rmse_tb_1, aes(x=x_levy, y=rmse_levy, shape=factor(source), col=factor(geo))) +
+  geom_point(size=2) + theme_bw(base_family = "Times") +
+  geom_hline(yintercept=0) + geom_hline(yintercept=-0.3, lty = 'dashed') +
+  geom_hline(yintercept=0.3, lty = 'dashed') +
+  scale_shape_manual(values=rep(c(1:18,65:90))) +
+  scale_colour_manual(values = c("Red","Black","Blue")) +
+  theme(
+         panel.grid.major = element_blank()
+        , panel.grid.minor=element_blank()
+        , legend.text = element_text(size=5)
+        , legend.background=element_rect(fill="white", size=0.15, linetype="solid", colour = "black")
+        , legend.justification =c("right","top")
+        #, legend.position = c(0.05,0.95)
+        , legend.title=element_blank()
+        , legend.spacing.x = unit(1, "pt")
+        , legend.key.height = unit(2.5,"mm")
+        , legend.spacing.y = unit(1, "pt")
+        #, legend.direction = "horizontal"
+        #, legend.box.margin = margin(0.001,0.001,0.001,0.001,"pt")
+        , legend.key.size = unit(1,"mm")
+        , legend.key = element_rect(size=1)
+        #, legend.text=element_text(size=4)
+        , axis.text = element_text(size = 6.5, colour = "black") 
+        , axis.title.x = element_text(size= 8.5, vjust=1)
+        , axis.title.y= element_text(size=8.5, vjust=-1)) +
+  coord_trans(limx = c(0,-0.2), limy = c(-1,1)) +
+  labs(y=expression(paste(italic("Relative deviation of "), italic(X[RMSE]), italic(" [-]"))), x=expression(paste(italic(X[OSV-Calculated]), italic(" [-]")))) +
+  annotate("text", x=c(-0.18,-0.18), y=c(-0.35,0.35),label=c("-30%","+30%"),family="Times",colour="red",size=2) +
+  ggsave(Fig_rmse[5], height = 6.5, width = 8, unit = "cm", dpi = 1600)
+
+
+# -----------------------------------------------------
+# Fig. 16. x_rmse vs. x_corr (shape=source, col=geo, cor = levy, condition = we > 150)
+rmse_tb_2 = subset(rmse_tb,
+            we > 150)
+           #& source != 'Labuntsov et al.'
+           #& source != 'Ferrell and Bylund'
+           #& source != 'Jain et al.'
+           #& source != 'Rouhani'
+           #& source != 'Maurer'
+           #& source != 'Evangelisti and Lupoli'
+           #& source != 'Costa'
+           #& source != 'Dix'
+           #& source != 'Egen et al.'
+           #& source != 'Chirstensen'
+           #& source != 'Staub et al.'
+           #& source != 'Marchaterre et al.'
+           #& source != 'Bartolomei et al.'
+           #& source != 'Bartolomei and Chanturiya'
+           #& source != 'Bibeau'
+           #& source != 'Foglia et al.'
+           #& source != 'Christensen') # data
+
+
+ggplot(data=rmse_tb_2, aes(x=x_levy, y=rmse_levy, shape=factor(source), col=factor(geo))) +
+  geom_point(size=2) + theme_bw(base_family = "Times") +
+  geom_hline(yintercept=0) + geom_hline(yintercept=-0.3, lty = 'dashed') +
+  geom_hline(yintercept=0.3, lty = 'dashed') +
+  scale_shape_manual(values=rep(c(1:18,65:90))) +
+  scale_colour_manual(values = c("Red","Black","Blue")) +
+  theme(
+         panel.grid.major = element_blank()
+        , panel.grid.minor=element_blank()
+        , legend.text = element_text(size=5)
+        , legend.background=element_rect(fill="white", size=0.15, linetype="solid", colour = "black")
+        , legend.justification =c("right","top")
+        #, legend.position = c(0.05,0.95)
+        , legend.title=element_blank()
+        , legend.spacing.x = unit(1, "pt")
+        , legend.key.height = unit(2,"mm")
+        , legend.spacing.y = unit(1, "pt")
+        #, legend.direction = "horizontal"
+        #, legend.box.margin = margin(0.001,0.001,0.001,0.001,"pt")
+        , legend.key.size = unit(1,"mm")
+        , legend.key = element_rect(size=1)
+        #, legend.text=element_text(size=4)
+        , axis.text = element_text(size = 6.5, colour = "black") 
+        , axis.title.x = element_text(size= 8.5, vjust=1)
+        , axis.title.y= element_text(size=8.5, vjust=-1)) +
+  coord_trans(limx = c(0,-0.2), limy = c(-1,1)) +
+  labs(y=expression(paste(italic("Relative deviation of "), italic(X[RMSE]), italic(" [-]"))), x=expression(paste(italic(X[OSV-Calculated]), italic(" [-]")))) +
+  annotate("text", x=c(-0.18,-0.18), y=c(-0.35,0.35),label=c("-30%","+30%"),family="Times",colour="red",size=2) +
+  ggsave(Fig_rmse[6], height = 6.5, width = 8, unit = "cm", dpi = 1600)
+
+# -----------------------------------------------------
+# Fig. 17. x_rmse vs. x_corr (shape=source, col=geo, cor = bowr, condition = we <= 150)
+rmse_tb = dbGetQuery(con, "SELECT a.*, b.source, b.flow, b.geo, b.hsur, c.param_dh, c.param_st, c.param_re, c.param_q, c.param_g, c.param_p, c.param_ca, c.param_we, c.param_pe, b.we
+                           FROM rmse_osv_tb a
+                           INNER JOIN prop_osv_tb b
+                           ON a.index = b.index
+                           INNER JOIN dimnsl_param_quan_prop_tb c
+                           ON b.index = c.index
+                           WHERE ABS(a.rmse_bowr) > 0.3;")
+rmse_tb_1 = subset(rmse_tb,
+            we <= 150)
+           #& source != 'Labuntsov et al.'
+           #& source != 'Ferrell and Bylund'
+           #& source != 'Jain et al.'
+           #& source != 'Rouhani'
+           #& source != 'Maurer'
+           #& source != 'Evangelisti and Lupoli'
+           #& source != 'Costa'
+           #& source != 'Dix'
+           #& source != 'Egen et al.'
+           #& source != 'Chirstensen'
+           #& source != 'Staub et al.'
+           #& source != 'Marchaterre et al.'
+           #& source != 'Bartolomei et al.'
+           #& source != 'Bartolomei and Chanturiya'
+           #& source != 'Bibeau'
+           #& source != 'Foglia et al.'
+           #& source != 'Christensen') # data
+
+
+ggplot(data=rmse_tb_1, aes(x=x_bowr, y=rmse_bowr, shape=factor(source), col=factor(geo))) +
+  geom_point(size=2) + theme_bw(base_family = "Times") +
+  geom_hline(yintercept=0) + geom_hline(yintercept=-0.3, lty = 'dashed') +
+  geom_hline(yintercept=0.3, lty = 'dashed') +
+  scale_shape_manual(values=rep(c(1:18,65:90))) +
+  scale_colour_manual(values = c("Red","Black","Blue")) +
+  theme(
+         panel.grid.major = element_blank()
+        , panel.grid.minor=element_blank()
+        , legend.text = element_text(size=5)
+        , legend.background=element_rect(fill="white", size=0.15, linetype="solid", colour = "black")
+        , legend.justification =c("right","top")
+        #, legend.position = c(0.05,0.95)
+        , legend.title=element_blank()
+        , legend.spacing.x = unit(1, "pt")
+        , legend.key.height = unit(2.5,"mm")
+        , legend.spacing.y = unit(1, "pt")
+        #, legend.direction = "horizontal"
+        #, legend.box.margin = margin(0.001,0.001,0.001,0.001,"pt")
+        , legend.key.size = unit(1,"mm")
+        , legend.key = element_rect(size=1)
+        #, legend.text=element_text(size=4)
+        , axis.text = element_text(size = 6.5, colour = "black") 
+        , axis.title.x = element_text(size= 8.5, vjust=1)
+        , axis.title.y= element_text(size=8.5, vjust=-1)) +
+  coord_trans(limx = c(0,-0.2), limy = c(-1,1)) +
+  labs(y=expression(paste(italic("Relative deviation of "), italic(X[RMSE]), italic(" [-]"))), x=expression(paste(italic(X[OSV-Calculated]), italic(" [-]")))) +
+  annotate("text", x=c(-0.18,-0.18), y=c(-0.35,0.35),label=c("-30%","+30%"),family="Times",colour="red",size=2) +
+  ggsave(Fig_rmse[7], height = 6.5, width = 8, unit = "cm", dpi = 1600)
+
+
+# -----------------------------------------------------
+# Fig. 18. x_rmse vs. x_corr (shape=source, col=geo, cor = bowr, condition = we > 150)
+rmse_tb_2 = subset(rmse_tb,
+            we > 150)
+           #& source != 'Labuntsov et al.'
+           #& source != 'Ferrell and Bylund'
+           #& source != 'Jain et al.'
+           #& source != 'Rouhani'
+           #& source != 'Maurer'
+           #& source != 'Evangelisti and Lupoli'
+           #& source != 'Costa'
+           #& source != 'Dix'
+           #& source != 'Egen et al.'
+           #& source != 'Chirstensen'
+           #& source != 'Staub et al.'
+           #& source != 'Marchaterre et al.'
+           #& source != 'Bartolomei et al.'
+           #& source != 'Bartolomei and Chanturiya'
+           #& source != 'Bibeau'
+           #& source != 'Foglia et al.'
+           #& source != 'Christensen') # data
+
+
+ggplot(data=rmse_tb_2, aes(x=x_bowr, y=rmse_bowr, shape=factor(source), col=factor(geo))) +
+  geom_point(size=2) + theme_bw(base_family = "Times") +
+  geom_hline(yintercept=0) + geom_hline(yintercept=-0.3, lty = 'dashed') +
+  geom_hline(yintercept=0.3, lty = 'dashed') +
+  scale_shape_manual(values=rep(c(1:18,65:90))) +
+  scale_colour_manual(values = c("Red","Black","Blue")) +
+  theme(
+         panel.grid.major = element_blank()
+        , panel.grid.minor=element_blank()
+        , legend.text = element_text(size=5)
+        , legend.background=element_rect(fill="white", size=0.15, linetype="solid", colour = "black")
+        , legend.justification =c("right","top")
+        #, legend.position = c(0.05,0.95)
+        , legend.title=element_blank()
+        , legend.spacing.x = unit(1, "pt")
+        , legend.key.height = unit(2.5,"mm")
+        , legend.spacing.y = unit(1, "pt")
+        #, legend.direction = "horizontal"
+        #, legend.box.margin = margin(0.001,0.001,0.001,0.001,"pt")
+        , legend.key.size = unit(1,"mm")
+        , legend.key = element_rect(size=1)
+        #, legend.text=element_text(size=4)
+        , axis.text = element_text(size = 6.5, colour = "black") 
+        , axis.title.x = element_text(size= 8.5, vjust=1)
+        , axis.title.y= element_text(size=8.5, vjust=-1)) +
+  coord_trans(limx = c(0,-0.2), limy = c(-1,1)) +
+  labs(y=expression(paste(italic("Relative deviation of "), italic(X[RMSE]), italic(" [-]"))), x=expression(paste(italic(X[OSV-Calculated]), italic(" [-]")))) +
+  annotate("text", x=c(-0.18,-0.18), y=c(-0.35,0.35),label=c("-30%","+30%"),family="Times",colour="red",size=2) +
+  ggsave(Fig_rmse[8], height = 6.5, width = 8, unit = "cm", dpi = 1600)
+
+# -----------------------------------------------------
+# Fig. 19. x_rmse vs. x_corr (shape=refri, col=geo, cor = js, condition = None)
+rmse_tb = dbGetQuery(con, "SELECT a.*, b.source, b.flow, b.geo, b.hsur, c.param_dh, c.param_st, c.param_re, c.param_q, c.param_g, c.param_p, c.param_ca, c.param_we, c.param_pe, b.we, b.refri
+                           FROM rmse_osv_tb a
+                           INNER JOIN prop_osv_tb b
+                           ON a.index = b.index
+                           INNER JOIN dimnsl_param_quan_prop_tb c
+                           ON b.index = c.index
+                           WHERE ABS(a.rmse_bowr) > 0.3;")
+
+rmse_tb_2 = subset(rmse_tb)
+           #we > 150)
+           #& source != 'Labuntsov et al.'
+           #& source != 'Ferrell and Bylund'
+           #& source != 'Jain et al.'
+           #& source != 'Rouhani'
+           #& source != 'Maurer'
+           #& source != 'Evangelisti and Lupoli'
+           #& source != 'Costa'
+           #& source != 'Dix'
+           #& source != 'Egen et al.'
+           #& source != 'Chirstensen'
+           #& source != 'Staub et al.'
+           #& source != 'Marchaterre et al.'
+           #& source != 'Bartolomei et al.'
+           #& source != 'Bartolomei and Chanturiya'
+           #& source != 'Bibeau'
+           #& source != 'Foglia et al.'
+           #& source != 'Christensen') # data
+
+
+ggplot(data=rmse_tb_2, aes(x=x_js, y=rmse_js, shape=factor(refri), col=factor(geo))) +
+  geom_point(size=2) + theme_bw(base_family = "Times") +
+  geom_hline(yintercept=0) + geom_hline(yintercept=-0.3, lty = 'dashed') +
+  geom_hline(yintercept=0.3, lty = 'dashed') +
+  scale_shape_manual(values=rep(c(1:18,65:90))) +
+  scale_colour_manual(values = c("Red","Black","Blue")) +
+  theme(
+         panel.grid.major = element_blank()
+        , panel.grid.minor=element_blank()
+        , legend.text = element_text(size=5)
+        , legend.background=element_rect(fill="white", size=0.15, linetype="solid", colour = "black")
+        , legend.justification =c("right","top")
+        #, legend.position = c(0.05,0.95)
+        , legend.title=element_blank()
+        , legend.spacing.x = unit(1, "pt")
+        , legend.key.height = unit(2.5,"mm")
+        , legend.spacing.y = unit(1, "pt")
+        #, legend.direction = "horizontal"
+        #, legend.box.margin = margin(0.001,0.001,0.001,0.001,"pt")
+        , legend.key.size = unit(1,"mm")
+        , legend.key = element_rect(size=1)
+        #, legend.text=element_text(size=4)
+        , axis.text = element_text(size = 6.5, colour = "black") 
+        , axis.title.x = element_text(size= 8.5, vjust=1)
+        , axis.title.y= element_text(size=8.5, vjust=-1)) +
+  coord_trans(limx = c(0,-0.2), limy = c(-1,1)) +
+  labs(y=expression(paste(italic("Relative deviation of "), italic(X[RMSE]), italic(" [-]"))), x=expression(paste(italic(X[OSV-Calculated]), italic(" [-]")))) +
+  annotate("text", x=c(-0.18,-0.18), y=c(-0.35,0.35),label=c("-30%","+30%"),family="Times",colour="red",size=2) +
+  ggsave(Fig_rmse[9], height = 6.5, width = 8, unit = "cm", dpi = 1600)
+
+```
+
