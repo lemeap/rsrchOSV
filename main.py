@@ -158,6 +158,12 @@ if __name__ == "__main__":
                     else:
                         osvTb.loc[i, 'xosv'] = round(osvTb.loc[i, 'serizawaXeq'], 4)
 
+
+                print("{}번째 데이터에서 계산된 Xosv: {}".format(i,osvTb.loc[i, 'xosv']))
+
+
+
+
                 """
                 if osvTb.loc[i, 'serizawaXeq'] < -0.014:
                     if osvTb.loc[i, 'bo'] < 0.0005:
@@ -204,12 +210,9 @@ if __name__ == "__main__":
                          6)
     osvTb['ec'] = round(osvTb[['v', 'cpf', 'tosv']].apply(lambda x: pro.calEc(x[0], x[1], x[2]), axis=1), 6)
 
-    # 계산된 osvTb의 properties 데이터를 PostgreSQL로 옮기기
-    osvTb.index.name = 'index'
-    sql.write_sql(osvTb, 'prop_osv_tb', dbEngine)
-
     # OSV 모델 계산하기
     corOsvTb = pd.DataFrame(data=osvTb[['source', 'run_id', 'xosv', 'tosv']])  # comparison table
+    print("선택된 corOsvTB의 데이터 개수는 {}입니다.".format(len(corOsvTb)))
 
     for i, row in corOsvTb.iterrows():  # Apply models or correlations to dataframe
         try:
@@ -368,6 +371,8 @@ if __name__ == "__main__":
 
     print("계산을 완료하였습니다.")
 
+    cnt = 0
+
     # Tree 분석을 위한 solution column 만들기
     for i in range(0, len(corOsvTb)):
         """
@@ -408,6 +413,38 @@ if __name__ == "__main__":
         else:
             corOsvTb.loc[i, 'sol'] = "None"
 
+
+        # solution set에 따라 데이터를 거르기 위한 작업 진행
+        if osvTb.loc[i, 'pr'] <= 1.5:
+            if osvTb.loc[i, 'xMartin'] < 0.45:
+                if osvTb.loc[i, 'martinXeq'] > 0:
+                    osvTb.loc[i, 'xosv'] = round(min(osvTb.loc[i, ['serizawaXeq', 'staubXeq']]), 4)
+                else:
+                    if corOsvTb.loc[i, 'sol'] == "Martin":
+                        osvTb.loc[i, 'xosv'] = round(osvTb.loc[i, 'martinXeq'], 4)
+                    else:
+                        osvTb.loc[i, 'xosv'] = np.nan
+                        cnt +=1
+            else:
+                osvTb.loc[i, 'xosv'] = round(min(osvTb.loc[i, ['martinXeq', 'staubXeq']]), 4)
+        else:
+            if osvTb.loc[i, 'serizawaXeq'] > 0:
+                osvTb.loc[i, 'xosv'] = round(min(osvTb.loc[i, ['martinXeq', 'staubXeq']]), 4)
+            else:
+                if corOsvTb.loc[i, 'sol'] == "Serizawa":
+                    osvTb.loc[i, 'xosv'] = round(osvTb.loc[i, 'serizawaXeq'], 4)
+                else:
+                    osvTb.loc[i, 'xosv'] = np.nan
+                    cnt +=1
+
+
+    print("계산된 cnt")
+    print(cnt)
+
+    # 계산된 osvTb의 properties 데이터를 PostgreSQL로 옮기기
+    osvTb.index.name = 'index'
+    sql.write_sql(osvTb, 'prop_osv_tb', dbEngine)
+
     # RMSE를 계산하기 위한 테이블. 각 correlation에 대한 data마다의 rmse값을 작성.
     model_who = ['js', 'sz', 'levy', 'bowr', 'unal', 'griffith', 'hancox', 'ha2005', 'ha2018', 'dix', 'sekoguchi',
                  'psz', 'kal', 'costa', 'msz']
@@ -424,11 +461,9 @@ if __name__ == "__main__":
         ['datap', 'run_id', 'source', 'refri', 'geo', 'flow', 'pp', 'alpha', 'xeq', 'xMartin', 'serizawaXeq',
          'martinXeq', 'staubXeq', 'gsat', 'qratio'])]
     dfMer = pd.merge(dfNur, corOsvTb.loc[:,['rmse_js','rmse_sz']], on = "index", how ="inner")
-    condXosv = dfMer['xosv'] <0
-    condRmse = np.abs(dfMer['rmse_js']) < 0.5
-    dfMer = dfMer[condXosv & condRmse]
-    print(dfMer)
-
+    #condXosv = dfMer['xosv'] <0
+    #condRmse = np.abs(dfMer['rmse_sz']) < 0.6
+    #dfMer = dfMer[condXosv & condRmse]
 
     # MIN-MAX Scaler 적용한 데이터프레임 만들기
     min_max_scaler = MinMaxScaler(feature_range=[0, 1])
@@ -441,6 +476,7 @@ if __name__ == "__main__":
     fitted_quantile = quantile_scaler.fit(dfNur)
     out_quantile = quantile_scaler.transform(dfNur)
     out_quantile = pd.DataFrame(out_quantile, columns=dfNur.columns, index=list(dfNur.index.values))
+
 
     # PostgreSQL DB에 옮기기
     sql.write_sql(out_quantile, 'osv_quan_tb', dbEngine)

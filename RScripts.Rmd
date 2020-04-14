@@ -60,10 +60,10 @@ df = dbGetQuery(con, "SELECT T2.we, T2.pe, T2.st, T2.nu, T2.ca, T2.source, T2.ge
                       INNER JOIN prop_osv_tb T3
                       ON T2.index = T3.index
                       --WHERE ABS(T1.rmse_js) < 0.4
-                      AND T3.xosv < 0
+                      --AND T3.xosv < 0
                       --AND T3.source = 'Ferrell and Bylund'
-                      AND T3.we >= 200
-                      AND ABS(T1.rmse_sz) < 0.3;")
+                      --AND T3.we >= 200
+                      --AND ABS(T1.rmse_sz) < 0.6;")
 
 # quantile 분석을 위한 db
 df1 = dbGetQuery(con, "SELECT c.*
@@ -73,10 +73,9 @@ ON a.index = b.index
 INNER JOIN dimnsl_param_quan_prop_tb c
 ON b.index = c.index 
 WHERE a.xosv < 0
-AND ABS(a.rmse_sz) < 0.5
+--AND ABS(a.rmse_sz) < 0.6
 ORDER BY ABS(a.rmse_sz) DESC
 ;")
-
 
 df2 = dbGetQuery(con, "SELECT a.xosv, b.q, b.pe, b.st, b.geo
                        FROM rmse_osv_tb a
@@ -85,15 +84,11 @@ df2 = dbGetQuery(con, "SELECT a.xosv, b.q, b.pe, b.st, b.geo
 					             AND b.st >0
                        AND b.source IN ('Dougall', 'De Munk', 'McLeod', 'Rogers et al.', 'Bibeau', 'Zeitoun', 'Ahmadi et al.');")
 
-df2$sol
-
 reg_db = dbGetQuery(con, "SELECT a.*
                           FROM prop_osv_tb a
-                          INNER JOIN rmse_osv_tb b
+                          INNER JOIN dimnsl_param_quan_prop_tb b
                           ON a.index = b.index
-                          --WHERE ABS(b.rmse_js) < 0.4;
-                          -- we > 150
-                          --AND lh IS NOT NULL;")
+                          AND param_dh != 10;")
 
 
 
@@ -161,10 +156,10 @@ test = anal_db[-intrain,]
 
 ```{r}
 # 회귀분석으로 새로운 모델 만들기
-F1=formula(real_nu ~ a*real_bd^c)
+F1=formula(real_ec ~ a*real_we^c)
 F2=formula(real_nu ~ a*real_pe^b)
-Corl1=nls(F1, start = list(a=100, c= 0.1), control = list(maxiter = 50000), data = df)
-Corl2=nls(F2, start = list(a=1, b=1), control = list(maxiter = 50000), data = df)
+Corl1=nls(F1, start = list(a=0.001, c= 0.1), control = list(maxiter = 50000), data = df)
+Corl2=nls(F2, start = list(a=1, b=1), control = list(maxiter = 50000), data = df1)
 summary(Corl1)
 summary(Corl2)
 ```
@@ -189,19 +184,8 @@ ggplot(data=reg_db,aes(x=p)) +
   labs(y=expression(paste(italic("Number of data "))), x=expression(paste(italic("Pressure  "), italic(" [bar]")))) +
   ggsave("Fig. 99. no. of data vs. pressure.png", height = 6.5, width = 8, unit = "cm", dpi = 1200)
 
-# void fraction profile
-sol_levels = levels(df2$sol)
-
-df2$sol = as.numeric(df2$sol)
-ggplot(data=df2, aes(x=sol)) + geom_histogram(binwidth = 0.5) + scale_x_continuous(breaks = c(1:3), labels = c(sol_levels))
-
-
-ggplot(data=df2, aes(x=pe, y=st)) + geom_point()+ stat_function(fun = function(x) 0.5*x)
-
-
-
 # Nusselt number vs. Peclet number for new correlation 
-ggplot(data=df, aes(x=(real_we)^0.5*real_bo^-0.2, y=real_ec*10^6, col=factor(geo), shape=factor(geo))) +
+ggplot(data=df, aes(x=real_pe, y=real_st, col=factor(geo), shape=factor(geo))) +
   geom_point() +
   scale_shape_manual(values=rep(c(1:18,65:90))) +
   scale_colour_manual(values = c("Red","Black","Blue")) +
@@ -221,7 +205,7 @@ ggplot(data=df, aes(x=(real_we)^0.5*real_bo^-0.2, y=real_ec*10^6, col=factor(geo
         legend.text=element_text(size=6), 
         axis.title.x = element_text(vjust=2),
         axis.title.y=element_text(vjust=-1.5)) +
-  coord_trans(x= 'log10', y= 'log10', limx=c(0.05,500000), limy = c(0.001, 10000)) +
+  coord_trans(x= 'log10', y= 'log10', limx=c(5000,500000), limy = c(0.001, 1)) +
   #annotate("text", x=c(2*10^6,2*10^6), y=c(15500,45000),label=c("+25%","-25%"),family="Times",colour="red",size=3) +
   annotation_logticks(scaled=TRUE) +
   #scale_x_continuous(breaks = trans_breaks("log10", function(x) log(x)), labels = trans_format("log10", math_format(10^.x))) +
@@ -252,19 +236,19 @@ Fig = c( "Fig_1_re_vs_ca_trend_shape_geo_col_None.png"
 # -----------------------------------------------------
 # Fig. 1. Re vs. Ca (shape=geo, col=None)
 td1=subset(df1
-           , source != 'Christensen'
-           & source != 'Jain et al.'
+           , 
+           #source != 'Dix'
+           # source != 'Jain et al.'
            #& source != 'Rouhani'
            #& source != 'Evangelisti and Lupoli'
            #& source != 'Costa'
-           & source != 'Dix'
-           & source != 'Edelman'
-           & source != 'Chirstensen'
-           & source != 'Staub et al.') # data
+           #&source != 'Christensen'
+           #& source != 'Edelman'
+           #& source != 'Staub et al.') # data
 
-ggplot(data=td1, aes(y=we, x=, shape = factor(source))) +
+ggplot(data=df1, aes(y=nu, x=pe, col = factor(param_we), shape = factor(param_ca))) +
   geom_point(size = 2) +
-  #geom_smooth(method = "lm", formula = y ~ poly(x,3,raw=TRUE), span= 0.2, se=F, col = "black", linetype = "dashed", size = 0.5) +
+  #geom_smooth(method = "lm", formula = y ~ poly(x,4,raw=TRUE), span= 0.2, se=F, col = "black", linetype = "dashed", size = 0.5) +
   theme_bw(base_family = "Times") +
   scale_colour_manual(values = c("Red","Black","Blue", "Green", "Purple", "Yellow", "Orange", "Navy", "Grey", "Cyan")) +
   scale_shape_manual(values=rep(c(1:18,65:90))) +
