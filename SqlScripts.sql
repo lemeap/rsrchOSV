@@ -491,7 +491,7 @@ ON T1.index = T2.index
 INNER JOIN rmse_osv_tb T3
 ON T2.index = T3.index
 WHERE T1.xosv < 0
-AND ABS(T3.rmse_js) < 0.65
+AND ABS(T3.rmse_sz) < 0.6
 ORDER BY T1.index
 );
 
