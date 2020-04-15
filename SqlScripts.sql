@@ -570,7 +570,7 @@ ORDER BY a.param_nu
 -- TREE OSV 분석 테이블 만들기
 DROP TABLE tree_osv_tb;
 CREATE TABLE tree_osv_tb AS (
-SELECT a.run_id, a.source, a.xosv, a.rmse_sz, a.sol, b.re, b.pe, b.ca, b.st, b.geo, b.refri
+SELECT a.run_id, a.source, a.xosv, a.rmse_sz, a.sol, b.re, b.pe, b.ca, b.st, b.geo, b.refri, a.tosv
 	, CAST(SPLIT_PART(b.xeq,'|',1) AS NUMERIC(10,4))AS stxeq
 	, CAST(SPLIT_PART(b.alpha,'|',1) AS NUMERIC(10,4))AS stalpha
 	, b.we, b.bo, b.pr, a."tstXeq" AS tstxeq,

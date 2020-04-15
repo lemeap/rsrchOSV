@@ -50,15 +50,17 @@ con = dbConnect(dbDriver("PostgreSQL"), dbname = "Research", host="localhost", p
 dbListTables(con)
 
 # df
-df = dbGetQuery(con, "SELECT T2.we, T2.pe, T2.st, T2.nu, T2.ca, T2.source, T2.geo, T3.g, T3.v, T3.sigma,T3.q, T3.rhof
-                      , T2.refri, T2.ec, T3.pr AS real_pr, T3.st AS real_st, T3.tosv, T3.cpf, T3.dh, T3.de, T3.bd AS real_bd
-                      , T3.we AS real_we, T3.re AS real_re, T3.ca AS real_ca, T3.pe AS real_pe, T3.nu AS real_nu
-                      , T3.ec AS real_ec, T3.bo AS real_bo
+df = dbGetQuery(con, "SELECT T2.we, T2.pe, T2.st, T2.nu, T2.ca, T2.source, T2.geo, T3.g, T3.v, T3.sigma, T3.q, T3.rhof, T3.ec AS real_ec
+, T3.bo AS real_bo, T2.refri, T3.pr AS real_pr, T3.st AS real_st, T3.tosv, T3.cpf, T3.dh, T3.de, T3.bd AS real_bd, T3.we AS real_we, T3.re AS real_re, T3.ca AS real_ca, T3.pe AS real_pe, T3.nu AS real_nu
                       FROM rmse_osv_tb T1
                       INNER JOIN dimnsl_param_quan_prop_tb T2
                       ON T1.index = T2.index
                       INNER JOIN prop_osv_tb T3
                       ON T2.index = T3.index
+                      WHERE T1.xosv IS NOT NULL
+                      AND T3.xosv < 0
+                      AND T3.xosv IS NOT NULL
+                      --AND T1.rmse_sz > -0.7
                       --WHERE ABS(T1.rmse_js) < 0.4
                       --AND T3.xosv < 0
                       --AND T3.source = 'Ferrell and Bylund'
@@ -101,9 +103,10 @@ anal_db = dbGetQuery(con, "SELECT *
                      FROM tree_osv_tb
                      --WHERE source = 'Foglia et al.'
                      WHERE sol != 'None'
-                     AND xosv IS NOT NULL
+                     AND sol IS NOT NULL
+                     AND stxeq IS NOT NULL
                      AND xosv < 0
-                     AND xosv > stxeq
+                     --AND xosv > stxeq
                      --AND sol != 'Martin'
                      --AND serizawaxeq > -0.05
                      --AND serizawaxeq < 0.00165
@@ -112,8 +115,8 @@ anal_db = dbGetQuery(con, "SELECT *
                      --AND pr <= 1.51
                      --AND serizawaxeq > -0.08
                      --AND ABS(xosv) >= 0.01
-                     AND tstxeq < 0.65
-                     --AND ABS(rmse_sz) < 0.5;")
+                     --AND tstxeq < 0.65
+                     --AND ABS(rmse_sz) < 0.65;")
                           
 
 anal_db = subset(anal_db, xMartin != "NA")
@@ -123,7 +126,7 @@ head(anal_db)
 library(tree)
 install.packages("tree")
 
-treemod = tree(factor(sol)~pr+bo+pe+serizawaxeq, data=anal_db)
+treemod = tree(factor(sol)~pr+tosv+bo+pe+serizawaxeq, data=anal_db)
 plot(treemod)
 text(treemod)
 
@@ -136,7 +139,7 @@ text(prune.trees, pretty=0)
 # PARTY 라이브러리를 사용한 결정 트리 분석
 install.packages("party")
 library(party)
-partymod<-ctree(factor(sol)~(re+xmartin+pr+dl), data=anal_db)
+partymod<-ctree(factor(sol)~(xmartin+serizawaxeq), data=anal_db)
 plot(partymod)
 
 partypred<-predict(partymod, anal_db)
@@ -184,8 +187,25 @@ ggplot(data=reg_db,aes(x=p)) +
   labs(y=expression(paste(italic("Number of data "))), x=expression(paste(italic("Pressure  "), italic(" [bar]")))) +
   ggsave("Fig. 99. no. of data vs. pressure.png", height = 6.5, width = 8, unit = "cm", dpi = 1200)
 
+df = dbGetQuery(con, "SELECT T2.we, T2.pe, T2.st, T2.nu, T2.ca, T2.source, T2.geo, T3.g, T3.v, T3.sigma, T3.q, T3.rhof, T3.ec AS real_ec
+, T3.bo AS real_bo, T2.refri, T3.pr AS real_pr, T3.st AS real_st, T3.tosv, T3.cpf, T3.dh, T3.de, T3.bd AS real_bd, T3.we AS real_we, T3.re AS real_re, T3.ca AS real_ca, T3.pe AS real_pe, T3.nu AS real_nu
+                      FROM rmse_osv_tb T1
+                      INNER JOIN dimnsl_param_quan_prop_tb T2
+                      ON T1.index = T2.index
+                      INNER JOIN prop_osv_tb T3
+                      ON T2.index = T3.index
+                      WHERE T1.xosv IS NOT NULL
+                      --AND T1.tosv > 6
+                      --AND T1.xosv 
+                      AND T2.geo = 'C'
+                      AND T1.rmse_sz < 0.6
+                      AND T1.rmse_sz > -0.8
+                      --AND T1.rmse_js < 0.55
+                      --AND T1.rmse_js > -1
+                      ")
+
 # Nusselt number vs. Peclet number for new correlation 
-ggplot(data=df, aes(x=real_pe, y=real_st, col=factor(geo), shape=factor(geo))) +
+ggplot(data=df, aes(x=real_pe, y=real_st, col=factor(geo), shape=factor(source))) +
   geom_point() +
   scale_shape_manual(values=rep(c(1:18,65:90))) +
   scale_colour_manual(values = c("Red","Black","Blue")) +
@@ -213,9 +233,9 @@ ggplot(data=df, aes(x=real_pe, y=real_st, col=factor(geo), shape=factor(geo))) +
   stat_function(fun = function(x) 455/x,  xlim=c(3000,70000)   ,   linetype="solid", colour="black", size =0.3) +
   stat_function(fun = function(x) 1.25*455/x, xlim=c(3000,70000)  ,   linetype="dashed", colour="red", size=0.25)  +
   stat_function(fun = function(x) 0.75*455/x, xlim=c(3000,70000)  ,   linetype="dashed", colour="red", size=0.25)  +
-  stat_function(fun = function(x) 0.0065 ,   xlim=c(70000,400000), linetype="solid", colour="black", size=0.25)   +
-  stat_function(fun = function(x) 0.0065*0.75 ,   xlim=c(70000,400000), linetype="dashed", colour="red", size=0.25)    +
-  stat_function(fun = function(x) 0.0065*1.25 ,   xlim=c(70000,400000), linetype="dashed", colour="red", size=0.25) +
+  stat_function(fun = function(x) 0.0065 ,   xlim=c(70000,500000), linetype="solid", colour="black", size=0.25)   +
+  stat_function(fun = function(x) 0.0065*0.75 ,   xlim=c(70000,500000), linetype="dashed", colour="red", size=0.25)    +
+  stat_function(fun = function(x) 0.0065*1.25 ,   xlim=c(70000,500000), linetype="dashed", colour="red", size=0.25) +
   ggsave("sz.png", width = 10, height= 9, units = "cm", dpi=1200)
 
 ```
@@ -246,7 +266,7 @@ td1=subset(df1
            #& source != 'Edelman'
            #& source != 'Staub et al.') # data
 
-ggplot(data=df1, aes(y=nu, x=pe, col = factor(param_we), shape = factor(param_ca))) +
+ggplot(data=df1, aes(y=st, x=bo, col = factor(param_dh), shape = factor(param_ca))) +
   geom_point(size = 2) +
   #geom_smooth(method = "lm", formula = y ~ poly(x,4,raw=TRUE), span= 0.2, se=F, col = "black", linetype = "dashed", size = 0.5) +
   theme_bw(base_family = "Times") +
