@@ -187,25 +187,44 @@ ggplot(data=reg_db,aes(x=p)) +
   labs(y=expression(paste(italic("Number of data "))), x=expression(paste(italic("Pressure  "), italic(" [bar]")))) +
   ggsave("Fig. 99. no. of data vs. pressure.png", height = 6.5, width = 8, unit = "cm", dpi = 1200)
 
-df = dbGetQuery(con, "SELECT T2.we, T2.pe, T2.st, T2.nu, T2.ca, T2.source, T2.geo, T3.g, T3.v, T3.sigma, T3.q, T3.rhof, T3.ec AS real_ec
-, T3.bo AS real_bo, T2.refri, T3.pr AS real_pr, T3.st AS real_st, T3.tosv, T3.cpf, T3.dh, T3.de, T3.bd AS real_bd, T3.we AS real_we, T3.re AS real_re, T3.ca AS real_ca, T3.pe AS real_pe, T3.nu AS real_nu
-                      FROM rmse_osv_tb T1
-                      INNER JOIN dimnsl_param_quan_prop_tb T2
-                      ON T1.index = T2.index
-                      INNER JOIN prop_osv_tb T3
-                      ON T2.index = T3.index
-                      WHERE T1.xosv IS NOT NULL
-                      --AND T1.tosv > 6
-                      --AND T1.xosv 
-                      AND T2.geo = 'C'
-                      AND T1.rmse_sz < 0.6
-                      AND T1.rmse_sz > -0.8
-                      --AND T1.rmse_js < 0.55
-                      --AND T1.rmse_js > -1
-                      ")
+df = dbGetQuery(con, "WITH a AS (
+	SELECT *
+	FROM rmse_osv_tb
+	WHERE xosv IS NOT NULL -- 88개 데이터 제거 / 602
+	AND xosv < 0 -- 7개 데이터 제거 / 595
+	AND xeq1 IS NOT NULL -- 246개 데이터 제거 / 349
+	AND geo = 'R' -- Rectangular channel / 146
+	AND rmse_sz > -0.85 -- RMSE_sz 0.6보다 큰 것만 남김. / 73
+	AND rmse_sz < 0.6
+	UNION
+	SELECT *
+	FROM rmse_osv_tb
+	WHERE xosv IS NOT NULL -- 88개 데이터 제거 / 602
+	AND xosv < 0 -- 7개 데이터 제거 / 595
+	AND xeq1 IS NOT NULL -- 246개 데이터 제거 / 349
+	AND geo != 'R' -- Rectangular channel / 146
+	AND rmse_sz > -0.8 -- RMSE_sz 0.6보다 큰 것만 남김. / 73
+	AND rmse_sz < 0.55
+	ORDER BY index ASC
+	-- Total 276
+), tbb AS (
+	SELECT *
+	FROM rmse_osv_tb
+	WHERE xosv IS NOT NULL -- 88개 데이터 제거 / 602
+	AND xosv < 0 -- 7개 데이터 제거 / 595
+	AND xeq1 IS NULL
+) SELECT b.*
+FROM a a
+INNER JOIN prop_osv_tb b
+ON a.index = b.index
+UNION
+SELECT b.*
+FROM tbb c
+INNER JOIN prop_osv_tb b
+ON c.index = b.index;")
 
 # Nusselt number vs. Peclet number for new correlation 
-ggplot(data=df, aes(x=real_pe, y=real_st, col=factor(geo), shape=factor(source))) +
+ggplot(data=df, aes(x=pe, y=st, col=factor(geo), shape=factor(source))) +
   geom_point() +
   scale_shape_manual(values=rep(c(1:18,65:90))) +
   scale_colour_manual(values = c("Red","Black","Blue")) +
