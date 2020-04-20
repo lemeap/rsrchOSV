@@ -65,13 +65,17 @@ if __name__ == "__main__":
             if osvTb.loc[i, 'ti'] == np.nan:
                 osvTb.loc[i, 'dtin'] = np.nan
             else:
-                osvTb.loc[i, 'dtin'] = round(osvTb.loc[i, 'tsat'] - osvTb[i, 'ti'], 6)
+                osvTb.loc[i, 'dtin'] = round(osvTb.loc[i, 'tsat'] - osvTb.loc[i, 'ti'], 4)
             # Xosv 결정에 사용되므로 미리 계산
             osvTb.loc[i, 'bo'] = round(pro.calBo(osvTb.loc[i, 'q'], osvTb.loc[i, 'lam'], osvTb.loc[i, 'g']), 6)
 
         else:
             # Xosv 결정에 사용되므로 미리 계산
             osvTb.loc[i, 'bo'] = round(pro.calBo(osvTb.loc[i, 'q'], osvTb.loc[i, 'lam'], osvTb.loc[i, 'g']), 6)
+            if osvTb.loc[i, 'ti'] == np.nan:
+                osvTb.loc[i, 'dtin'] = np.nan
+            else:
+                osvTb.loc[i, 'dtin'] = round(osvTb.loc[i, 'tsat'] - osvTb.loc[i, 'ti'], 4)
             continue
 
 
@@ -182,7 +186,7 @@ if __name__ == "__main__":
                           osvTb.loc[i, 'tosv']), 6)
             osvTb.loc[i, 're'] = round(pro.calRe(osvTb.loc[i, 'g'], osvTb.loc[i, 'dh'], osvTb.loc[i, 'muf']), 6)
             osvTb.loc[i, 'we'] = round(
-                pro.calWe(osvTb.loc[i, 'rhof'], osvTb.loc[i, 'v'], osvTb.loc[i, 'dh'], osvTb.loc[i, 'sigma']), 6)
+                pro.calWe(osvTb.loc[i, 'rhof'], osvTb.loc[i, 'v'], osvTb.loc[i, 'de'], osvTb.loc[i, 'sigma']), 6)
             osvTb.loc[i, 'bd'] = round(
                 pro.calBd(osvTb.loc[i, 'rhof'], osvTb.loc[i, 'rhov'], osvTb.loc[i, 'dh'], osvTb.loc[i, 'sigma']), 6)
             osvTb.loc[i, 'pr'] = round(pro.calPr(osvTb.loc[i, 'cpf'], osvTb.loc[i, 'muf'], osvTb.loc[i, 'kf']), 6)
@@ -298,7 +302,8 @@ if __name__ == "__main__":
                                                                                           osvTb.loc[i, 'lam'],
                                                                                           osvTb.loc[i, 'cpf'],
                                                                                           osvTb.loc[i, 'bo'],
-                                                                                          osvTb.loc[i, 'v'])  # Ha 2018
+                                                                                          osvTb.loc[i, 'v'],
+                                                                                          osvTb.loc[i, 'sigma'])  # Ha 2018
             corOSVTb.loc[i, 'dt_dix'], corOSVTb.loc[i, 'x_dix'] = mod.calDix(osvTb.loc[i, 'kf'],
                                                                                  osvTb.loc[i, 'q'],
                                                                                  osvTb.loc[i, 'dh'],

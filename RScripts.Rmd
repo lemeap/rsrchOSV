@@ -50,31 +50,18 @@ con = dbConnect(dbDriver("PostgreSQL"), dbname = "Research", host="localhost", p
 dbListTables(con)
 
 # df
-df = dbGetQuery(con, "SELECT T2.we, T2.pe, T2.st, T2.nu, T2.ca, T2.source, T2.geo, T3.g, T3.v, T3.sigma, T3.q, T3.rhof, T3.ec AS real_ec
-, T3.bo AS real_bo, T2.refri, T3.pr AS real_pr, T3.st AS real_st, T3.tosv, T3.cpf, T3.dh, T3.de, T3.bd AS real_bd, T3.we AS real_we, T3.re AS real_re, T3.ca AS real_ca, T3.pe AS real_pe, T3.nu AS real_nu
-                      FROM rmse_osv_tb T1
-                      INNER JOIN dimnsl_param_quan_prop_tb T2
-                      ON T1.index = T2.index
-                      INNER JOIN prop_osv_tb T3
-                      ON T2.index = T3.index
-                      WHERE T1.xosv IS NOT NULL
-                      AND T3.xosv < 0
-                      AND T3.xosv IS NOT NULL
-                      --AND T1.rmse_sz > -0.7
-                      --WHERE ABS(T1.rmse_js) < 0.4
-                      --AND T3.xosv < 0
-                      --AND T3.source = 'Ferrell and Bylund'
-                      --AND T3.we >= 200
-                      --AND ABS(T1.rmse_sz) < 0.6;")
+df = dbGetQuery(con, "SELECT *
+                FROM res_osv_tb
+                WHERE we <= 200;")
 
 # quantile 분석을 위한 db
 df1 = dbGetQuery(con, "SELECT c.*
 FROM rmse_osv_tb a
-INNER JOIN prop_osv_tb b
+INNER JOIN res_osv_tb b
 ON a.index = b.index 
 INNER JOIN dimnsl_param_quan_prop_tb c
 ON b.index = c.index 
-WHERE a.xosv < 0
+--WHERE a.xosv < 0
 --AND ABS(a.rmse_sz) < 0.6
 ORDER BY ABS(a.rmse_sz) DESC
 ;")
@@ -87,10 +74,10 @@ df2 = dbGetQuery(con, "SELECT a.xosv, b.q, b.pe, b.st, b.geo
                        AND b.source IN ('Dougall', 'De Munk', 'McLeod', 'Rogers et al.', 'Bibeau', 'Zeitoun', 'Ahmadi et al.');")
 
 reg_db = dbGetQuery(con, "SELECT a.*
-                          FROM prop_osv_tb a
+                          FROM res_osv_tb a
                           INNER JOIN dimnsl_param_quan_prop_tb b
                           ON a.index = b.index
-                          AND param_dh != 10;")
+                          --AND param_dh != 10;")
 
 
 
@@ -159,10 +146,10 @@ test = anal_db[-intrain,]
 
 ```{r}
 # 회귀분석으로 새로운 모델 만들기
-F1=formula(real_ec ~ a*real_we^c)
-F2=formula(real_nu ~ a*real_pe^b)
-Corl1=nls(F1, start = list(a=0.001, c= 0.1), control = list(maxiter = 50000), data = df)
-Corl2=nls(F2, start = list(a=1, b=1), control = list(maxiter = 50000), data = df1)
+F1=formula(st ~ a*pe^b)
+F2=formula(nu ~ a*pe^b)
+Corl1=nls(F1, start = list(a=10, b= 0.1), control = list(maxiter = 50000), data = df)
+Corl2=nls(F2, start = list(a=1, b=1), control = list(maxiter = 50000), data = df)
 summary(Corl1)
 summary(Corl2)
 ```
@@ -187,41 +174,6 @@ ggplot(data=reg_db,aes(x=p)) +
   labs(y=expression(paste(italic("Number of data "))), x=expression(paste(italic("Pressure  "), italic(" [bar]")))) +
   ggsave("Fig. 99. no. of data vs. pressure.png", height = 6.5, width = 8, unit = "cm", dpi = 1200)
 
-df = dbGetQuery(con, "WITH a AS (
-	SELECT *
-	FROM rmse_osv_tb
-	WHERE xosv IS NOT NULL -- 88개 데이터 제거 / 602
-	AND xosv < 0 -- 7개 데이터 제거 / 595
-	AND xeq1 IS NOT NULL -- 246개 데이터 제거 / 349
-	AND geo = 'R' -- Rectangular channel / 146
-	AND rmse_sz > -0.85 -- RMSE_sz 0.6보다 큰 것만 남김. / 73
-	AND rmse_sz < 0.6
-	UNION
-	SELECT *
-	FROM rmse_osv_tb
-	WHERE xosv IS NOT NULL -- 88개 데이터 제거 / 602
-	AND xosv < 0 -- 7개 데이터 제거 / 595
-	AND xeq1 IS NOT NULL -- 246개 데이터 제거 / 349
-	AND geo != 'R' -- Rectangular channel / 146
-	AND rmse_sz > -0.8 -- RMSE_sz 0.6보다 큰 것만 남김. / 73
-	AND rmse_sz < 0.55
-	ORDER BY index ASC
-	-- Total 276
-), tbb AS (
-	SELECT *
-	FROM rmse_osv_tb
-	WHERE xosv IS NOT NULL -- 88개 데이터 제거 / 602
-	AND xosv < 0 -- 7개 데이터 제거 / 595
-	AND xeq1 IS NULL
-) SELECT b.*
-FROM a a
-INNER JOIN prop_osv_tb b
-ON a.index = b.index
-UNION
-SELECT b.*
-FROM tbb c
-INNER JOIN prop_osv_tb b
-ON c.index = b.index;")
 
 # Nusselt number vs. Peclet number for new correlation 
 ggplot(data=df, aes(x=pe, y=st, col=factor(geo), shape=factor(source))) +
@@ -262,32 +214,31 @@ ggplot(data=df, aes(x=pe, y=st, col=factor(geo), shape=factor(source))) +
 무차원 수 비교를 위한 그래프
 ``` {r}
 Fig = c( "Fig_1_re_vs_ca_trend_shape_geo_col_None.png"
-        ,"Fig_2_st_vs_pe_under_we_150_shape_None_col_None.png"
-        ,"Fig_3_st_vs_pe_over_we_150_shape_None_col_None.png"
-        ,"Fig_4_nu_vs_pe_under_we_150_shape_None_col_None.png"
-        ,"Fig_5_nu_vs_pe_over_we_150_shape_None_col_None.png"
-        ,"Fig_6_pe_vs_we_under_we_150_shape_refri_col_None.png"
-        ,"Fig_7_pe_vs_we_over_we_150_shape_param_dh_col_NOne.png"
-        ,"Fig_8_pe_vs_re_under_we_150_shape_refri_col_None.png"
+        ,"Fig_2_st_vs_pe_under_we_200_shape_None_col_None.png"
+        ,"Fig_3_st_vs_pe_over_we_200_shape_None_col_None.png"
+        ,"Fig_4_nu_vs_pe_under_we_200_shape_None_col_None.png"
+        ,"Fig_5_nu_vs_pe_over_we_200_shape_None_col_None.png"
+        ,"Fig_6_pe_vs_we_under_we_200_shape_refri_col_None.png"
+        ,"Fig_7_pe_vs_we_over_we_200_shape_param_dh_col_NOne.png"
+        ,"Fig_8_pe_vs_re_under_we_200_shape_refri_col_None.png"
         ,"Fig_9_pe_vs_re_over_None_shape_refri_col_None.png"
         ,"Fig_10_ca_vs_v_over_None_shape_refri_col_param_dh.png")
 
 # -----------------------------------------------------
 # Fig. 1. Re vs. Ca (shape=geo, col=None)
-td1=subset(df1
-           , 
-           #source != 'Dix'
-           # source != 'Jain et al.'
+td1=subset(df1, 
+           source != 'Dix'
+           & source != 'Jain et al.'
            #& source != 'Rouhani'
            #& source != 'Evangelisti and Lupoli'
            #& source != 'Costa'
-           #&source != 'Christensen'
-           #& source != 'Edelman'
-           #& source != 'Staub et al.') # data
+           & source != 'Christensen'
+           & source != 'Edelman'
+           & source != 'Staub et al.') # data
 
-ggplot(data=df1, aes(y=st, x=bo, col = factor(param_dh), shape = factor(param_ca))) +
+ggplot(data=td1, aes(y=re, x=ca, shape = factor(geo))) +
   geom_point(size = 2) +
-  #geom_smooth(method = "lm", formula = y ~ poly(x,4,raw=TRUE), span= 0.2, se=F, col = "black", linetype = "dashed", size = 0.5) +
+  geom_smooth(method = "lm", formula = y ~ poly(x,4,raw=TRUE), span= 0.2, se=F, col = "black", linetype = "dashed", size = 0.5) +
   theme_bw(base_family = "Times") +
   scale_colour_manual(values = c("Red","Black","Blue", "Green", "Purple", "Yellow", "Orange", "Navy", "Grey", "Cyan")) +
   scale_shape_manual(values=rep(c(1:18,65:90))) +
@@ -314,25 +265,27 @@ ggplot(data=df1, aes(y=st, x=bo, col = factor(param_dh), shape = factor(param_ca
   ggsave(Fig[1], height = 6.5, width = 8, unit = "cm", dpi = 1200)
 
 # -----------------------------------------------------
-# Fig. 2. St vs. Pe (shape=param_dh, col=None, condition = we <= 150)
+# Fig. 2. St vs. Pe (shape=param_dh, col=None, condition = we <= 200)
 td2=subset(df1
-           , real_we <= 150
+           , we <= 200
            #& source != 'Christensen'
            #& source != 'Jain et al.'
-           #& source != 'Rouhani'
+           & source != 'Rouhani'
            #& source != 'Evangelisti and Lupoli'
            #& source != 'Costa'
            #& source != 'Dix'
            #& source != 'Chirstensen'
-           #& source != 'Staub et al.'
+           & source != 'Staub et al.'
            #& source != 'Marchaterre et al.'
            #& source != 'Bartolomei et al.'
            #& source != 'Bibeau'
-           #& source != 'Maurer'
+           & source != 'Maurer'
            #& source != 'Zeitoun'
-           & source != 'Ferrell and Bylund') # data
+           & source != 'Foglia et al.'
+           & source != 'Ferrell and Bylund'
+           & source != 'McLeod') # data
 
-ggplot(data=td2, aes(y=st, x=pe, shape=factor(source))) +
+ggplot(data=td2, aes(y=st, x=pe, shape=factor(param_dh))) +
   geom_point(size = 2) +
   geom_smooth(method = "lm", formula = y ~ poly(x,2, raw=TRUE), span= 0.2, se=F, col = "black", linetype = "dashed", size = 0.5) +
   theme_bw(base_family = "Times") +
@@ -364,8 +317,8 @@ ggplot(data=td2, aes(y=st, x=pe, shape=factor(source))) +
 
 
 # -----------------------------------------------------
-# Fig. 3. St vs. Pe (shape=param_dh, col=None, condition = we > 150)
-td3=subset(df1, real_we > 150)
+# Fig. 3. St vs. Pe (shape=param_dh, col=None, condition = we > 200)
+td3=subset(df1, real_we > 200)
            #& source != 'Christensen'
            #& source != 'Jain et al.'
            #& source != 'Rouhani'
@@ -408,12 +361,12 @@ ggplot(data=td3, aes(y=st, x=pe, shape=factor(param_dh))) +
   ggsave(Fig[3], height = 6.5, width = 8, unit = "cm", dpi = 1200)
 
 # -----------------------------------------------------
-# Fig. 4. Nu vs. Pe (shape=param_dh, col=None, condition = we <= 150)
-td4=subset(df1, real_we <= 150)
+# Fig. 4. Nu vs. Pe (shape=param_dh, col=None, condition = we <= 200)
+td4=subset(df1, real_we <= 200)
 
-ggplot(data=td4, aes(y=nu, x=pe, shape = factor(source))) +
+ggplot(data=td4, aes(y=nu, x=pe, shape = factor(param_dh))) +
   geom_point(size = 2) +
-  geom_smooth(method = "lm", formula = y ~ poly(x,2,raw=TRUE), span= 0.2, se=F, col = "black", linetype = "dashed", size = 0.5) +
+  #geom_smooth(method = "lm", formula = y ~ poly(x,2,raw=TRUE), span= 0.2, se=F, col = "black", linetype = "dashed", size = 0.5) +
   theme_bw(base_family = "Times") +
   scale_colour_manual(values = c("Red","Black","Blue", "Green", "Purple", "Yellow", "Orange", "Navy", "Grey", "Cyan")) +
   scale_shape_manual(values=rep(c(1:18,65:90))) +
@@ -440,24 +393,24 @@ ggplot(data=td4, aes(y=nu, x=pe, shape = factor(source))) +
   ggsave(Fig[4], height = 6.5, width = 8, unit = "cm", dpi = 1200)
 
 # -----------------------------------------------------
-# Fig. 5. Nu vs. Pe (shape=param_dh, col=None, condition = we > 150), 이거 그릴 떄는 rmse error < 0.2 이하로 재설정
+# Fig. 5. Nu vs. Pe (shape=param_dh, col=None, condition = we > 200), 이거 그릴 떄는 rmse error < 0.2 이하로 재설정
 td5=subset(df1
-           , real_we > 150
+           , real_we > 200
            & source != 'Labuntsov et al.'
            #& source != 'Ferrell and Bylund'
            #& source != 'Jain et al.'
            #& source != 'Rouhani'
-           #& source != 'Maurer'
-           #& source != 'Evangelisti and Lupoli'
+           & source != 'Maurer'
+           & source != 'Evangelisti and Lupoli'
            #& source != 'Costa'
            #& source != 'Dix'
-           #& source != 'Egen et al.'
+           & source != 'Egen et al.'
            #& source != 'Chirstensen'
            & source != 'Staub et al.'
            #& source != 'Marchaterre et al.'
            #& source != 'Bartolomei et al.'
            #& source != 'Bartolomei and Chanturiya'
-           #& source != 'Bibeau'
+           & source != 'Martin'
            & source != 'Foglia et al.'
            & source != 'Christensen') # data
 
@@ -471,8 +424,8 @@ ggplot(data=td5, aes(y=nu, x=pe, shape = factor(param_dh))) +
         , panel.grid.minor=element_blank()
         , legend.text = element_text(size=5)
         , legend.background=element_rect(fill="white", size=0.15, linetype="solid", colour = "black")
-        , legend.justification =c("right","bottom")
-        , legend.position = c(0.95,0.05)
+        , legend.justification =c("left","top")
+        , legend.position = c(0.05,0.95)
         , legend.title=element_blank()
         #, legend.spacing.x = unit(0.1, "pt")
         #, legend.spacing.y = unit(0.1, "pt")
@@ -486,13 +439,13 @@ ggplot(data=td5, aes(y=nu, x=pe, shape = factor(param_dh))) +
         , axis.title.y= element_text(size=8.5, vjust=-1)) +
   coord_trans(limx = c(0,1.00), limy = c(0,1)) +
   labs(y=expression(paste(italic("Nusselt number "), italic(" [-]"))), x=expression(paste(italic("Peclet number  "), italic(" [-]")))) +
-  annotate("text", x=0.725, y=0.225,label="Hydraulic diameter",family="Times",colour="black",size=2) +
+  annotate("text", x=0.175, y=0.975,label="Hydraulic diameter",family="Times",colour="black",size=2) +
   ggsave(Fig[5], height = 6.5, width = 8, unit = "cm", dpi = 1200)
 
 # -----------------------------------------------------
-# Fig. 6. Pe vs. We (shape=refri, col=None, condition = we <= 150)
+# Fig. 6. Pe vs. We (shape=refri, col=None, condition = we <= 200)
 td6=subset(df1
-           , real_we <= 150
+           , real_we <= 200
            #& source != 'Labuntsov et al.'
            #& source != 'Ferrell and Bylund'
            #& source != 'Jain et al.'
@@ -540,9 +493,9 @@ ggplot(data=td6, aes(y=pe, x=we, shape = factor(refri))) +
   ggsave(Fig[6], height = 6.5, width = 8, unit = "cm", dpi = 1200)
 
 # -----------------------------------------------------
-# Fig. 7. Pe vs. We (shape=param_dh, col=None, condition = we > 150)
+# Fig. 7. Pe vs. We (shape=param_dh, col=None, condition = we > 200)
 td7=subset(df1
-           , real_we > 150
+           , real_we > 200
            #& source != 'Labuntsov et al.'
            #& source != 'Ferrell and Bylund'
            & source != 'Jain et al.'
@@ -589,9 +542,9 @@ ggplot(data=td7, aes(y=pe, x=we, shape = factor(param_dh))) +
   ggsave(Fig[7], height = 6.5, width = 8, unit = "cm", dpi = 1200)
 
 # -----------------------------------------------------
-# Fig. 8. Pe vs. Re (shape=refri, col=None, condition = we <= 150)
+# Fig. 8. Pe vs. Re (shape=refri, col=None, condition = we <= 200)
 td8=subset(df1
-           , real_we <= 150
+           , real_we <= 200
            #& source != 'Labuntsov et al.'
            #& source != 'Ferrell and Bylund'
            & source != 'Jain et al.'
@@ -641,7 +594,7 @@ ggplot(data=td8, aes(y=pe, x=re, shape = factor(refri))) +
 # -----------------------------------------------------
 # Fig. 9. Pe vs. Re (shape=refri, col=None, condition = None)
 td9=subset(df1,
-           #, real_we > 150
+           #, real_we > 200
             source != 'Labuntsov et al.'
            #& source != 'Ferrell and Bylund'
            & source != 'Jain et al.'
@@ -691,7 +644,7 @@ ggplot(data=td9, aes(y=pe, x=re, shape = factor(refri))) +
 # -----------------------------------------------------
 # Fig. 10. Ca vs. v (shape=refri, col=param_dh, condition = None)
 td10=subset(df1, 
-           #, real_we > 150
+           #, real_we > 200
            #& source != 'Labuntsov et al.'
            #& source != 'Ferrell and Bylund'
            #& source != 'Jain et al.'
@@ -742,24 +695,24 @@ ggplot(data=td10, aes(y=ca, x=v, shape = factor(refri), col=factor(param_p))) +
 
 Equlibrium quality를 비교하기 위한 그래프
 ```{r}
-Fig_rmse = c( "Fig_11_rmse_vs_js_under_we_150_shape_source_col_geo.png"
-            , "Fig_12_rmse_vs_js_over_we_150_shape_source_col_geo.png"
-            , "Fig_13_rmse_vs_sz_under_we_150_shape_source_col_geo.png"
-            , "Fig_14_rmse_vs_sz_over_we_150_shape_source_col_geo.png"
-            , "Fig_15_rmse_vs_levy_under_we_150_shape_source_col_geo.png"
-            , "Fig_16_rmse_vs_levy_over_we_150_shape_source_col_geo.png"
-            , "Fig_17_rmse_vs_bowr_under_we_150_shape_source_col_geo.png"
-            , "Fig_18_rmse_vs_bowr_over_we_150_shape_source_col_geo.png"
-            , "Fig_19_rmse_vs_ha2005_under_we_150_shape_source_col_geo.png"
-            , "Fig_20_rmse_vs_ha2005_over_we_150_shape_source_col_geo.png"
-            , "Fig_21_rmse_vs_ha2018_under_we_150_shape_source_col_geo.png"
-            , "Fig_22_rmse_vs_ha2018_over_we_150_shape_source_col_geo.png"
-            , "Fig_23_rmse_vs_unal_under_we_150_shape_source_col_geo.png"
-            , "Fig_24_rmse_vs_unal_over_we_150_shape_source_col_geo.png"
+Fig_rmse = c( "Fig_11_rmse_vs_js_under_we_200_shape_source_col_geo.png"
+            , "Fig_12_rmse_vs_js_over_we_200_shape_source_col_geo.png"
+            , "Fig_13_rmse_vs_sz_under_we_200_shape_source_col_geo.png"
+            , "Fig_14_rmse_vs_sz_over_we_200_shape_source_col_geo.png"
+            , "Fig_15_rmse_vs_levy_under_we_200_shape_source_col_geo.png"
+            , "Fig_16_rmse_vs_levy_over_we_200_shape_source_col_geo.png"
+            , "Fig_17_rmse_vs_bowr_under_we_200_shape_source_col_geo.png"
+            , "Fig_18_rmse_vs_bowr_over_we_200_shape_source_col_geo.png"
+            , "Fig_19_rmse_vs_ha2005_under_we_200_shape_source_col_geo.png"
+            , "Fig_20_rmse_vs_ha2005_over_we_200_shape_source_col_geo.png"
+            , "Fig_21_rmse_vs_ha2018_under_we_200_shape_source_col_geo.png"
+            , "Fig_22_rmse_vs_ha2018_over_we_200_shape_source_col_geo.png"
+            , "Fig_23_rmse_vs_unal_under_we_200_shape_source_col_geo.png"
+            , "Fig_24_rmse_vs_unal_over_we_200_shape_source_col_geo.png"
             , "Fig_25_rmse_vs_js_all_shape_source_col_geo.png")
 
 # -----------------------------------------------------
-# Fig. 11. x_rmse vs. x_corr (shape=source, col=geo, cor = new, condition = we <= 150)
+# Fig. 11. x_rmse vs. x_corr (shape=source, col=geo, cor = new, condition = we <= 200)
 rmse_tb = dbGetQuery(con, "SELECT a.*, b.source, b.flow, b.geo, b.hsur, c.param_dh, c.param_st, c.param_re, c.param_q, c.param_g, c.param_p, c.param_ca, c.param_we, c.param_pe, b.we
                            FROM rmse_osv_tb a
                            INNER JOIN prop_osv_tb b
@@ -768,7 +721,7 @@ rmse_tb = dbGetQuery(con, "SELECT a.*, b.source, b.flow, b.geo, b.hsur, c.param_
                            ON b.index = c.index
                            WHERE ABS(a.rmse_js) < 0.5;")
 rmse_tb_1 = subset(rmse_tb,
-            we <= 150)
+            we <= 200)
            #& source != 'Labuntsov et al.'
            #& source != 'Ferrell and Bylund'
            #& source != 'Jain et al.'
@@ -819,9 +772,9 @@ ggplot(data=rmse_tb_1, aes(x=x_js, y=rmse_js*100, shape=factor(source), col=fact
   ggsave(Fig_rmse[1], height = 6.5, width = 8, unit = "cm", dpi = 1600)
 
 # -----------------------------------------------------
-# Fig. 12. x_rmse vs. x_corr (shape=source, col=geo, cor = new, condition = we > 150)
+# Fig. 12. x_rmse vs. x_corr (shape=source, col=geo, cor = new, condition = we > 200)
 rmse_tb_2 = subset(rmse_tb,
-            we > 150)
+            we > 200)
            #& source != 'Labuntsov et al.'
            #& source != 'Ferrell and Bylund'
            #& source != 'Jain et al.'
@@ -872,7 +825,7 @@ ggplot(data=rmse_tb_2, aes(x=x_js, y=rmse_js, shape=factor(hsur), col=factor(geo
   ggsave(Fig_rmse[2], height = 6.5, width = 8, unit = "cm", dpi = 1600)
 
 # -----------------------------------------------------
-# Fig. 13. x_rmse vs. x_corr (shape=source, col=geo, cor = sz, condition = we <= 150)
+# Fig. 13. x_rmse vs. x_corr (shape=source, col=geo, cor = sz, condition = we <= 200)
 rmse_tb = dbGetQuery(con, "SELECT a.*, b.source, b.flow, b.geo, b.hsur, c.param_dh, c.param_st, c.param_re, c.param_q, c.param_g, c.param_p, c.param_ca, c.param_we, c.param_pe, b.we
                            FROM rmse_osv_tb a
                            INNER JOIN prop_osv_tb b
@@ -881,7 +834,7 @@ rmse_tb = dbGetQuery(con, "SELECT a.*, b.source, b.flow, b.geo, b.hsur, c.param_
                            ON b.index = c.index
                            WHERE ABS(a.rmse_sz) > 0.3;")
 rmse_tb_1 = subset(rmse_tb,
-            we <= 150)
+            we <= 200)
            #& source != 'Labuntsov et al.'
            #& source != 'Ferrell and Bylund'
            #& source != 'Jain et al.'
@@ -933,9 +886,9 @@ ggplot(data=rmse_tb_1, aes(x=x_sz, y=rmse_sz, shape=factor(source), col=factor(g
 
 
 # -----------------------------------------------------
-# Fig. 14. x_rmse vs. x_corr (shape=source, col=geo, cor = sz, condition = we > 150)
+# Fig. 14. x_rmse vs. x_corr (shape=source, col=geo, cor = sz, condition = we > 200)
 rmse_tb_2 = subset(rmse_tb,
-            we > 150
+            we > 200
            #& source != 'Labuntsov et al.'
            #& source != 'Ferrell and Bylund'
            #& source != 'Jain et al.'
@@ -987,7 +940,7 @@ ggplot(data=rmse_tb_2, aes(x=x_sz, y=rmse_sz, shape=factor(source), col=factor(g
   ggsave(Fig_rmse[4], height = 6.5, width = 8, unit = "cm", dpi = 1600)
 
 # -----------------------------------------------------
-# Fig. 15. x_rmse vs. x_corr (shape=source, col=geo, cor = levy, condition = we <= 150)
+# Fig. 15. x_rmse vs. x_corr (shape=source, col=geo, cor = levy, condition = we <= 200)
 rmse_tb = dbGetQuery(con, "SELECT a.*, b.source, b.flow, b.geo, b.hsur, c.param_dh, c.param_st, c.param_re, c.param_q, c.param_g, c.param_p, c.param_ca, c.param_we, c.param_pe, b.we
                            FROM rmse_osv_tb a
                            INNER JOIN prop_osv_tb b
@@ -996,7 +949,7 @@ rmse_tb = dbGetQuery(con, "SELECT a.*, b.source, b.flow, b.geo, b.hsur, c.param_
                            ON b.index = c.index
                            WHERE ABS(a.rmse_levy) > 0.3;")
 rmse_tb_1 = subset(rmse_tb,
-            we <= 150)
+            we <= 200)
            #& source != 'Labuntsov et al.'
            #& source != 'Ferrell and Bylund'
            #& source != 'Jain et al.'
@@ -1048,9 +1001,9 @@ ggplot(data=rmse_tb_1, aes(x=x_levy, y=rmse_levy, shape=factor(source), col=fact
 
 
 # -----------------------------------------------------
-# Fig. 16. x_rmse vs. x_corr (shape=source, col=geo, cor = levy, condition = we > 150)
+# Fig. 16. x_rmse vs. x_corr (shape=source, col=geo, cor = levy, condition = we > 200)
 rmse_tb_2 = subset(rmse_tb,
-            we > 150)
+            we > 200)
            #& source != 'Labuntsov et al.'
            #& source != 'Ferrell and Bylund'
            #& source != 'Jain et al.'
@@ -1101,7 +1054,7 @@ ggplot(data=rmse_tb_2, aes(x=x_levy, y=rmse_levy, shape=factor(source), col=fact
   ggsave(Fig_rmse[6], height = 6.5, width = 8, unit = "cm", dpi = 1600)
 
 # -----------------------------------------------------
-# Fig. 17. x_rmse vs. x_corr (shape=source, col=geo, cor = bowr, condition = we <= 150)
+# Fig. 17. x_rmse vs. x_corr (shape=source, col=geo, cor = bowr, condition = we <= 200)
 rmse_tb = dbGetQuery(con, "SELECT a.*, b.source, b.flow, b.geo, b.hsur, c.param_dh, c.param_st, c.param_re, c.param_q, c.param_g, c.param_p, c.param_ca, c.param_we, c.param_pe, b.we
                            FROM rmse_osv_tb a
                            INNER JOIN prop_osv_tb b
@@ -1110,7 +1063,7 @@ rmse_tb = dbGetQuery(con, "SELECT a.*, b.source, b.flow, b.geo, b.hsur, c.param_
                            ON b.index = c.index
                            WHERE ABS(a.rmse_bowr) > 0.3;")
 rmse_tb_1 = subset(rmse_tb,
-            we <= 150)
+            we <= 200)
            #& source != 'Labuntsov et al.'
            #& source != 'Ferrell and Bylund'
            #& source != 'Jain et al.'
@@ -1162,9 +1115,9 @@ ggplot(data=rmse_tb_1, aes(x=x_bowr, y=rmse_bowr, shape=factor(source), col=fact
 
 
 # -----------------------------------------------------
-# Fig. 18. x_rmse vs. x_corr (shape=source, col=geo, cor = bowr, condition = we > 150)
+# Fig. 18. x_rmse vs. x_corr (shape=source, col=geo, cor = bowr, condition = we > 200)
 rmse_tb_2 = subset(rmse_tb,
-            we > 150)
+            we > 200)
            #& source != 'Labuntsov et al.'
            #& source != 'Ferrell and Bylund'
            #& source != 'Jain et al.'
@@ -1225,7 +1178,7 @@ rmse_tb = dbGetQuery(con, "SELECT a.*, b.source, b.flow, b.geo, b.hsur, c.param_
                            WHERE ABS(a.rmse_bowr) > 0.3;")
 
 rmse_tb_2 = subset(rmse_tb)
-           #we > 150)
+           #we > 200)
            #& source != 'Labuntsov et al.'
            #& source != 'Ferrell and Bylund'
            #& source != 'Jain et al.'

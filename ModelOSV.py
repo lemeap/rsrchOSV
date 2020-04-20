@@ -74,8 +74,8 @@ class ModelOSV(PhysicalProperty):
             xOSV = -cpf * dtOSV / lam
             return round(dtOSV,4), round(xOSV,4)
     
-    def calHa2018(self,rhof, rhov, lam, cpf, bo, v):
-        ui = v /(1.18*(9.8*(rhof-rhov)/rhof**2)**0.25)
+    def calHa2018(self,rhof, rhov, lam, cpf, bo, v, sigma):
+        ui = v /(1.18*(9.8*sigma*(rhof-rhov)/rhof**2)**0.25)
         if ui <= 1.55:
             dtOSV = 7.29*(lam/cpf)*bo**0.8203
             xOSV = -cpf * dtOSV / lam
@@ -336,12 +336,12 @@ class ModelOSV(PhysicalProperty):
         """
         if We <= 200:
             #dtOSV = ((v ** 2)/ (2*rhof*( 0.8877* (Ca/Bo) ** (1.155))))*10**6
-            #dtOSV = (q * 10 ** 6) / (rhof * v * ( ))
-            dtOSV = (q * (10 ** 6) * dh) / (kf*(865 * (Bo) ** 0.075))
+            dtOSV = (q * 10 ** 6) / (cpf * rhof * v * (220 * Pe ** -0.915 ))
+            #dtOSV = (q * (10 ** 6) * dh) / (kf*(865 * (Bo) ** 0.075))
             xOSV = -cpf * dtOSV / lam
             return round(dtOSV,4), round(xOSV,4)
         else:
-            dtOSV = (q * (10 ** 6) * dh) / (kf*(0.1098 * (Pe) ** 0.765))
+            dtOSV = (q * (10 ** 6) * dh) / (kf*(0.115 * (Pe) ** 0.765))
             xOSV = -cpf * dtOSV / lam
             return round(dtOSV,4), round(xOSV,4)
 
