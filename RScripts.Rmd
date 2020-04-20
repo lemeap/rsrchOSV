@@ -174,6 +174,39 @@ ggplot(data=reg_db,aes(x=p)) +
   labs(y=expression(paste(italic("Number of data "))), x=expression(paste(italic("Pressure  "), italic(" [bar]")))) +
   ggsave("Fig. 99. no. of data vs. pressure.png", height = 6.5, width = 8, unit = "cm", dpi = 1200)
 
+# Void fraction profile 그리기
+# 387 / 11.27 bar / 1166 kg/m2s / 0.185/ 18.27 K/ Marchaterre et al. 
+alpha = c(0.1219731,0.161435,0.1542601,0.2080717,0.1973094,0.2331839,0.258296,0.3587444,0.4843049,0.5883408,0.5991031,0.6923767,0.6672646)
+xeq = c(-0.249253731,-0.211940299,-0.179104478,-0.141791045,-0.108955224,-0.073134328,-0.037313433,-0.002985075,0.031343284,0.065671642,0.101492537,0.135820896,0.171641791)
+
+reg_void_1_tb = data.frame(alpha, xeq)
+ggplot(data= reg_void_1_tb, aes(y= alpha, x= xeq)) +
+  geom_point() +
+  geom_vline(xintercept = 0) +
+  geom_hline(yintercept = 0) +
+  geom_smooth(method = "lm", formula = y ~ poly(x,3,raw=TRUE), span= 0.2, se=F, col = "black", linetype = "dashed", size = 0.5) +
+  labs(y=expression(paste(italic("Void fraction "), italic(" [-]"))), x=expression(paste(italic("Equlibriuam quality "), italic(" [-]")))) +
+  theme_bw(base_family = "Times") +
+  theme(text=element_text(size=9.5)) +
+  theme(panel.grid.major = element_blank()
+        , panel.grid.minor=element_blank()
+        , legend.text = element_text(size=5)
+        , legend.background=element_rect(fill="white", size=0.15, linetype="solid", colour = "black")
+        #, legend.justification =c("right","bottom")
+        , legend.position = c(0.8,0.1)
+        , legend.title=element_blank()
+        #, legend.spacing.x = unit(0.1, "pt")
+        #, legend.spacing.y = unit(0.1, "pt")
+        , legend.direction = "horizontal"
+        #, legend.box.margin = margin(0.001,0.001,0.001,0.001,"pt")
+        , legend.key.size = unit(0.001,"mm")
+        , legend.key = element_rect(size=1)
+        #, legend.text=element_text(size=4)
+        , axis.text = element_text(size = 6.5, colour = "black")
+        , axis.title.x = element_text(size= 8.5, vjust=1)
+        , axis.title.y= element_text(size=8.5, vjust=-1)) +
+  coord_trans(limx = c(-0.5,0.25), limy = c(0,0.5))
+
 
 # Nusselt number vs. Peclet number for new correlation 
 ggplot(data=df, aes(x=pe, y=st, col=factor(geo), shape=factor(source))) +
