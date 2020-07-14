@@ -335,12 +335,12 @@ class ModelOSV(PhysicalProperty):
         :param lam: Heat of vaporization [J/kg]
         :return: Equilibrium thermal quality [-]
         """
-        if We <= 150:
-            dtOSV = (q * (10 ** 6)) / (rhof*v*cpf*(205 * Pe ** -0.89))
+        if We <= 200:
+            dtOSV = (q * (10 ** 6)) / (rhof*v*cpf*(220 * Pe ** -0.915))
             xOSV = -cpf * dtOSV / lam
             return round(dtOSV,4), round(xOSV,4)
         else:
-            dtOSV = (q * 10 ** 6 * dh) / (kf*(0.12*Pe**0.765))
+            dtOSV = (q * 10 ** 6 * dh) / (kf*(0.115*Pe**0.765))
             xOSV = -cpf * dtOSV / lam
             return round(dtOSV,4), round(xOSV,4)
 
