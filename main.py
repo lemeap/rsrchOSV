@@ -6,6 +6,7 @@ import time
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib import style
+#trestatd
 
 # 데이터 분석 모듈
 from CoolProp.CoolProp import PropsSI
