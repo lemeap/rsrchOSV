@@ -194,7 +194,7 @@ CREATE TABLE rawdata_1 (
 );
 
 
---DROP TABLE res_osv_tb;
+DROP TABLE res_osv_tb;
 CREATE TABLE res_osv_tb AS (
 WITH a AS (
 	SELECT *
@@ -687,7 +687,8 @@ SELECT COUNT(*)      , CAST(AVG(rmse_js) AS NUMERIC(10,4)) * 100 AS me
 		  , CAST(SQRT(AVG(POWER(rmse_js,2))) AS NUMERIC(10,4)) * 100 AS rmse
 	   	FROM rmse_osv_tb a
 		INNER JOIN res_osv_tb b
-		ON a.index = b.index;
+		ON a.index = b.index
+		group by source;
 
 -- Griffith et al.(1958) 44, 64.37, 65.37
 SELECT COUNT(*)      , CAST(AVG(rmse_griffith) AS NUMERIC(10,4)) * 100 AS me
